@@ -1,0 +1,66 @@
+// Urban Ledger - Backend Prisma Schema
+// Coordinated with Rohith (Database Owner) for Odoo Hackathon 2026
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  CONTACT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ContactType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+// ==========================================
+// USER & AUTHENTICATION MODELS
+// ==========================================
+
+model User {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  mobile       String?
+  passwordHash String
+  role         Role        @default(CONTACT)
+  status       UserStatus  @default(ACTIVE)
+  contactId    String?     @unique
+  contact      Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("users")
+}
+
+model Contact {
+  id        String      @id @default(cuid())
+  name      String
+  email     String?
+  mobile    String?
+  type      ContactType @default(CUSTOMER)
+  status    String      @default("ACTIVE")
+  user      User?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@map("contacts")
+}
