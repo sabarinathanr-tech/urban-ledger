@@ -44,4 +44,5 @@ dev.db
 coverage/
 .nyc_output/
 
+# TypeScript cache
 *.tsbuildinfo

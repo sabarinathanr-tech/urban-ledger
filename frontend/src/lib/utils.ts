@@ -1,7 +1,10 @@
 ﻿/**
- * Utility function to combine CSS class names cleanly.
+ * Utility function to conditionally combine CSS class names.
+ * Filters out falsy values and handles strings, arrays, and objects.
  */
-export function cn(...classes: (string | boolean | undefined | null | Record<string, boolean> | (string | boolean | undefined | null)[])[]): string {
+export function cn(
+  ...classes: (string | boolean | undefined | null | Record<string, boolean> | (string | boolean | undefined | null)[])[]
+): string {
   const result: string[] = [];
 
   for (const item of classes) {
