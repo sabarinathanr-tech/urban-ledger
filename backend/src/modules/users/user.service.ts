@@ -15,20 +15,27 @@ export class UserService {
     email: string;
     mobile: string | null;
     role: Role | string;
-    status: UserStatus | string;
+    isActive?: boolean;
+    status?: UserStatus | string;
     contact?: unknown;
     createdAt: Date;
     updatedAt: Date;
   }): UserResponse {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contactObj = (user as any).contact;
     return {
       id: user.id,
       name: user.name,
       email: user.email,
       mobile: user.mobile,
       role: user.role as Role,
-      status: user.status as UserStatus,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      contact: (user as any).contact || null,
+      status: (user.status as UserStatus) || (user.isActive !== false ? 'ACTIVE' : 'INACTIVE'),
+      contact: contactObj
+        ? {
+            ...contactObj,
+            status: contactObj.status || (contactObj.isActive !== false ? 'ACTIVE' : 'INACTIVE'),
+          }
+        : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -58,9 +65,7 @@ export class UserService {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(input.password, saltRounds);
     const mobile = input.mobile && input.mobile.trim() !== '' ? input.mobile.trim() : null;
-    const role = input.role;
-
-    // Contact setup if applicable
+    const role: Role = input.role || ROLES.CONTACT;
     const isContact = role === ROLES.CONTACT;
     const contactType: ContactType = input.contactType || CONTACT_TYPES.CUSTOMER;
 
@@ -73,7 +78,7 @@ export class UserService {
             mobile,
             passwordHash,
             role,
-            status: 'ACTIVE',
+            isActive: true,
             ...(isContact && {
               contact: {
                 create: {
@@ -81,7 +86,7 @@ export class UserService {
                   email: normalizedEmail,
                   mobile,
                   type: contactType,
-                  status: 'ACTIVE',
+                  isActive: true,
                 },
               },
             }),

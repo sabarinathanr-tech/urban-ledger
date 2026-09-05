@@ -103,14 +103,14 @@ export class AuthService {
             mobile,
             passwordHash,
             role,
-            status: 'ACTIVE',
+            isActive: true,
             contact: {
               create: {
                 name: input.name.trim(),
                 email: normalizedEmail,
                 mobile,
                 type: CONTACT_TYPES.CUSTOMER,
-                status: 'ACTIVE',
+                isActive: true,
               },
             },
           },
@@ -126,7 +126,7 @@ export class AuthService {
           mobile: user.mobile,
           passwordHash: user.passwordHash,
           role: user.role as Role,
-          status: user.status as UserStatus,
+          status: user.isActive ? 'ACTIVE' : 'INACTIVE',
           contact: user.contact
             ? {
                 id: user.contact.id,
@@ -134,7 +134,7 @@ export class AuthService {
                 email: user.contact.email,
                 mobile: user.contact.mobile,
                 type: user.contact.type,
-                status: user.contact.status,
+                status: user.contact.isActive ? 'ACTIVE' : 'INACTIVE',
               }
             : null,
           createdAt: user.createdAt,
@@ -214,7 +214,7 @@ export class AuthService {
             mobile: dbUser.mobile,
             passwordHash: dbUser.passwordHash,
             role: dbUser.role as Role,
-            status: dbUser.status as UserStatus,
+            status: dbUser.isActive ? 'ACTIVE' : 'INACTIVE',
             contact: dbUser.contact
               ? {
                   id: dbUser.contact.id,
@@ -222,7 +222,7 @@ export class AuthService {
                   email: dbUser.contact.email,
                   mobile: dbUser.contact.mobile,
                   type: dbUser.contact.type,
-                  status: dbUser.contact.status,
+                  status: dbUser.contact.isActive ? 'ACTIVE' : 'INACTIVE',
                 }
               : null,
             createdAt: dbUser.createdAt,
@@ -287,7 +287,7 @@ export class AuthService {
             mobile: dbUser.mobile,
             passwordHash: dbUser.passwordHash,
             role: dbUser.role as Role,
-            status: dbUser.status as UserStatus,
+            status: dbUser.isActive ? 'ACTIVE' : 'INACTIVE',
             contact: dbUser.contact
               ? {
                   id: dbUser.contact.id,
@@ -295,7 +295,7 @@ export class AuthService {
                   email: dbUser.contact.email,
                   mobile: dbUser.contact.mobile,
                   type: dbUser.contact.type,
-                  status: dbUser.contact.status,
+                  status: dbUser.contact.isActive ? 'ACTIVE' : 'INACTIVE',
                 }
               : null,
             createdAt: dbUser.createdAt,
