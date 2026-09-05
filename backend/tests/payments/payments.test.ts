@@ -24,7 +24,6 @@ test.before(async () => {
 test.after(async () => {
   server.closeAllConnections?.();
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  setTimeout(() => process.exit(0), 50);
 });
 
 const generateTokenForRole = (role: string, email = 'staff@urbanledger.com', userId = 'usr_staff'): string => {

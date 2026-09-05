@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/table';
 
 export function BudgetsPage() {
-  const { budgets, addBudget, analyticAccounts, addAnalyticAccount } = useERP();
+  const { budgets, addBudget, analyticAccounts, addAnalyticAccount, refreshERPData } = useERP();
 
   const [activeTab, setActiveTab] = useState<'budgets' | 'analytics'>('budgets');
   const [searchTerm, setSearchTerm] = useState('');
@@ -168,6 +168,7 @@ export function BudgetsPage() {
             </button>
           </div>
         }
+        onRefresh={refreshERPData}
       />
 
       {/* Main Content Area */}

@@ -35,6 +35,7 @@ export function PurchasesPage() {
     generateBillFromPO,
     contacts,
     products,
+    refreshERPData,
   } = useERP();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -187,6 +188,7 @@ export function PurchasesPage() {
         ]}
         activeFilter={statusFilter}
         onFilterChange={setStatusFilter}
+        onRefresh={refreshERPData}
       />
 
       {/* Main Content Area */}

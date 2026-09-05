@@ -17,7 +17,7 @@ export const createBillSchema = z.object({
 
 export const listBillsQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(100).default(50),
+  limit: z.coerce.number().min(1).max(2000).default(50),
   search: z.string().optional(),
   status: z.enum(['DRAFT', 'POSTED', 'PAID', 'OVERDUE', 'CANCELLED']).optional(),
   vendorId: z.string().optional(),

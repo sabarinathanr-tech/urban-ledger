@@ -37,7 +37,7 @@ export function ProductsPage() {
   const { id } = useParams<{ id?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { products, addProduct, toggleProductActive } = useERP();
+  const { products, addProduct, toggleProductActive, refreshERPData } = useERP();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
@@ -154,6 +154,7 @@ export function ProductsPage() {
         ]}
         activeFilter={typeFilter}
         onFilterChange={setTypeFilter}
+        onRefresh={refreshERPData}
       />
 
       {/* Main Content */}

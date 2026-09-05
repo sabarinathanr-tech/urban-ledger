@@ -39,6 +39,7 @@ export function BillsPage() {
     registerVendorPayment,
     contacts,
     products,
+    refreshERPData,
   } = useERP();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -224,6 +225,7 @@ export function BillsPage() {
         ]}
         activeFilter={statusFilter}
         onFilterChange={setStatusFilter}
+        onRefresh={refreshERPData}
       />
 
       {/* Main Content Area */}

@@ -33,6 +33,7 @@ import {
   type BudgetHealthItem,
   type AnalyticAccountItem,
 } from '@/data/erpData';
+import apiClient from '@/lib/axios';
 
 interface ERPContextType {
   // Master data
@@ -125,6 +126,7 @@ interface ERPContextType {
     openBillsAmount: number;
   };
 
+  refreshERPData: () => Promise<void>;
   resetDemoData: () => void;
 }
 
@@ -196,8 +198,357 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ────────────────────────────────────────────────────────
-  // SALES ACTIONS
+  // LIVE POSTGRESQL MULTI-DEVICE SYNCHRONIZATION
   // ────────────────────────────────────────────────────────
+  const refreshFromBackend = useCallback(async () => {
+    try {
+      const [
+        productsRes,
+        contactsRes,
+        salesRes,
+        purchasesRes,
+        invoicesRes,
+        billsRes,
+        paymentsRes,
+        accountsRes,
+        journalsRes,
+        journalEntriesRes,
+        budgetsRes,
+      ] = await Promise.allSettled([
+        apiClient.get('/products?limit=1000'),
+        apiClient.get('/contacts?limit=1000'),
+        apiClient.get('/sales?limit=1000'),
+        apiClient.get('/purchases?limit=1000'),
+        apiClient.get('/invoices?limit=1000'),
+        apiClient.get('/bills?limit=1000'),
+        apiClient.get('/payments?limit=1000'),
+        apiClient.get('/accounting/chart-of-accounts'),
+        apiClient.get('/accounting/journals'),
+        apiClient.get('/accounting/journal-entries'),
+        apiClient.get('/budgeting/budgets'),
+      ]);
+
+      if (productsRes.status === 'fulfilled' && productsRes.value.data?.data?.items?.length) {
+        setProducts(
+          productsRes.value.data.data.items.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            type: p.type || 'GOODS',
+            salesPrice: Number(p.salesPrice || 0),
+            purchasePrice: Number(p.purchasePrice || 0),
+            category: p.category || 'General',
+            stock: p.stock ?? 50,
+            isActive: p.isActive !== false,
+          }))
+        );
+      }
+
+      if (contactsRes.status === 'fulfilled' && contactsRes.value.data?.data?.items?.length) {
+        setContacts(
+          contactsRes.value.data.data.items.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            type: c.type || 'CUSTOMER',
+            email: c.email || '',
+            mobile: c.mobile || '',
+            city: c.city || '',
+            state: c.state || '',
+            pincode: c.pincode || '',
+            isActive: c.isActive !== false,
+            totalReceivable: Number(c.totalReceivable || 0),
+            totalPayable: Number(c.totalPayable || 0),
+            portalUser: c.portalUser,
+          }))
+        );
+      }
+
+      if (salesRes.status === 'fulfilled' && salesRes.value.data?.data?.items?.length) {
+        setSalesOrders(
+          salesRes.value.data.data.items.map((so: any) => ({
+            id: so.id,
+            orderNumber: so.orderNumber || so.reference,
+            customerId: so.customerId,
+            customerName: so.customerName,
+            orderDate: so.orderDate
+              ? so.orderDate.includes('T')
+                ? so.orderDate.split('T')[0]
+                : so.orderDate
+              : new Date().toISOString().split('T')[0],
+            status: so.status,
+            lines: (so.lines || []).map((l: any) => ({
+              id: l.id,
+              productId: l.productId,
+              productName: l.productName || l.description || 'Item',
+              quantity: Number(l.quantity),
+              unitPrice: Number(l.unitPrice),
+              taxRate: 18,
+              subtotal: Number(l.subtotal),
+              taxAmount: Number(l.tax || l.taxAmount || 0),
+              total: Number(l.total),
+            })),
+            subtotal: Number(so.subtotal),
+            taxTotal: Number(so.taxTotal || so.taxAmount || 0),
+            grandTotal: Number(so.grandTotal || so.totalAmount || 0),
+            invoiceId: so.invoiceId,
+          }))
+        );
+      }
+
+      if (purchasesRes.status === 'fulfilled' && purchasesRes.value.data?.data?.items?.length) {
+        setPurchaseOrders(
+          purchasesRes.value.data.data.items.map((po: any) => ({
+            id: po.id,
+            poNumber: po.poNumber || po.reference,
+            vendorId: po.vendorId,
+            vendorName: po.vendorName,
+            orderDate: po.orderDate
+              ? po.orderDate.includes('T')
+                ? po.orderDate.split('T')[0]
+                : po.orderDate
+              : new Date().toISOString().split('T')[0],
+            status: po.status,
+            lines: (po.lines || []).map((l: any) => ({
+              id: l.id,
+              productId: l.productId,
+              productName: l.productName || l.description || 'Item',
+              quantity: Number(l.quantity),
+              unitPrice: Number(l.unitPrice),
+              taxRate: 18,
+              subtotal: Number(l.subtotal),
+              taxAmount: Number(l.tax || l.taxAmount || 0),
+              total: Number(l.total),
+            })),
+            subtotal: Number(po.subtotal),
+            taxTotal: Number(po.taxTotal || po.taxAmount || 0),
+            grandTotal: Number(po.grandTotal || po.totalAmount || 0),
+            billId: po.billId,
+          }))
+        );
+      }
+
+      if (invoicesRes.status === 'fulfilled' && invoicesRes.value.data?.data?.items?.length) {
+        setInvoices(
+          invoicesRes.value.data.data.items.map((inv: any) => ({
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber || inv.reference,
+            customerId: inv.customerId,
+            customerName: inv.customerName,
+            issueDate: inv.issueDate
+              ? inv.issueDate.includes('T')
+                ? inv.issueDate.split('T')[0]
+                : inv.issueDate
+              : new Date().toISOString().split('T')[0],
+            dueDate: inv.dueDate
+              ? inv.dueDate.includes('T')
+                ? inv.dueDate.split('T')[0]
+                : inv.dueDate
+              : new Date().toISOString().split('T')[0],
+            status: inv.status,
+            lines: (inv.lines || []).map((l: any) => ({
+              id: l.id,
+              productId: l.productId,
+              productName: l.productName || l.description || 'Item',
+              quantity: Number(l.quantity),
+              unitPrice: Number(l.unitPrice),
+              taxRate: 18,
+              subtotal: Number(l.subtotal),
+              taxAmount: Number(l.tax || l.taxAmount || 0),
+              total: Number(l.total),
+            })),
+            subtotal: Number(inv.subtotal),
+            taxTotal: Number(inv.taxTotal || inv.taxAmount || 0),
+            grandTotal: Number(inv.grandTotal || inv.totalAmount || 0),
+            amountPaid: Number(inv.amountPaid || 0),
+            balanceDue: Number(
+              inv.balanceDue !== undefined
+                ? inv.balanceDue
+                : inv.grandTotal - (inv.amountPaid || 0)
+            ),
+            journalEntryId: inv.journalEntryId,
+          }))
+        );
+      }
+
+      if (billsRes.status === 'fulfilled' && billsRes.value.data?.data?.items?.length) {
+        setBills(
+          billsRes.value.data.data.items.map((b: any) => ({
+            id: b.id,
+            billNumber: b.billNumber || b.reference,
+            vendorId: b.vendorId,
+            vendorName: b.vendorName,
+            billDate: b.billDate
+              ? b.billDate.includes('T')
+                ? b.billDate.split('T')[0]
+                : b.billDate
+              : new Date().toISOString().split('T')[0],
+            dueDate: b.dueDate
+              ? b.dueDate.includes('T')
+                ? b.dueDate.split('T')[0]
+                : b.dueDate
+              : new Date().toISOString().split('T')[0],
+            status: b.status,
+            lines: (b.lines || []).map((l: any) => ({
+              id: l.id,
+              productId: l.productId,
+              productName: l.productName || l.description || 'Item',
+              quantity: Number(l.quantity),
+              unitPrice: Number(l.unitPrice),
+              taxRate: 18,
+              subtotal: Number(l.subtotal),
+              taxAmount: Number(l.tax || l.taxAmount || 0),
+              total: Number(l.total),
+            })),
+            subtotal: Number(b.subtotal),
+            taxTotal: Number(b.taxTotal || b.taxAmount || 0),
+            grandTotal: Number(b.grandTotal || b.totalAmount || 0),
+            amountPaid: Number(b.amountPaid || 0),
+            balanceDue: Number(
+              b.balanceDue !== undefined
+                ? b.balanceDue
+                : b.grandTotal - (b.amountPaid || 0)
+            ),
+            journalEntryId: b.journalEntryId,
+          }))
+        );
+      }
+
+      if (paymentsRes.status === 'fulfilled' && paymentsRes.value.data?.data?.items?.length) {
+        setPayments(
+          paymentsRes.value.data.data.items.map((p: any) => ({
+            id: p.id,
+            paymentNumber: p.paymentNumber || p.reference,
+            paymentDate: p.paymentDate
+              ? p.paymentDate.includes('T')
+                ? p.paymentDate.split('T')[0]
+                : p.paymentDate
+              : new Date().toISOString().split('T')[0],
+            type: p.type,
+            contactId: p.contactId,
+            contactName: p.contactName,
+            documentRef: p.documentRef || p.reference || '',
+            amount: Number(p.amount),
+            journal: p.journal || (p.method === 'CASH' ? 'CASH' : 'BANK'),
+            paymentMethod:
+              p.paymentMethod ||
+              (p.method === 'CASH' ? 'Cash Register' : 'HDFC Bank Transfer'),
+            status: p.status || 'POSTED',
+            journalEntryId: p.journalEntryId,
+          }))
+        );
+      }
+
+      if (
+        accountsRes.status === 'fulfilled' &&
+        Array.isArray(accountsRes.value.data?.data) &&
+        accountsRes.value.data.data.length > 0
+      ) {
+        setAccounts(
+          accountsRes.value.data.data.map((a: any) => ({
+            id: a.id,
+            code: a.code,
+            name: a.name,
+            type: a.type,
+            balance: Number(a.balance || 0),
+            currency: a.currency || 'INR',
+          }))
+        );
+      }
+
+      if (
+        journalsRes.status === 'fulfilled' &&
+        Array.isArray(journalsRes.value.data?.data) &&
+        journalsRes.value.data.data.length > 0
+      ) {
+        setJournals(
+          journalsRes.value.data.data.map((j: any) => ({
+            id: j.id,
+            code: j.code || j.type,
+            name: j.name,
+            type: j.type,
+            entriesCount: Number(j.entriesCount || 0),
+          }))
+        );
+      }
+
+      if (
+        journalEntriesRes.status === 'fulfilled' &&
+        Array.isArray(journalEntriesRes.value.data?.data) &&
+        journalEntriesRes.value.data.data.length > 0
+      ) {
+        setJournalEntries(
+          journalEntriesRes.value.data.data.map((je: any) => ({
+            id: je.id,
+            entryNumber: je.reference || je.entryNumber,
+            date: je.date
+              ? je.date.includes('T')
+                ? je.date.split('T')[0]
+                : je.date
+              : new Date().toISOString().split('T')[0],
+            reference: je.reference,
+            journalCode: je.journalCode || 'GENERAL',
+            journalName: je.journalName || 'General Journal',
+            status: je.status || 'POSTED',
+            lines: (je.lines || []).map((l: any) => ({
+              accountId: l.accountId,
+              accountCode: l.accountCode || '',
+              accountName: l.accountName || '',
+              debit: Number(l.debit || 0),
+              credit: Number(l.credit || 0),
+            })),
+            totalDebit: Number(je.totalDebit || 0),
+            totalCredit: Number(je.totalCredit || 0),
+            isBalanced:
+              Math.abs(Number(je.totalDebit || 0) - Number(je.totalCredit || 0)) < 0.01,
+          }))
+        );
+      }
+
+      if (
+        budgetsRes.status === 'fulfilled' &&
+        Array.isArray(budgetsRes.value.data?.data) &&
+        budgetsRes.value.data.data.length > 0
+      ) {
+        setBudgets(
+          budgetsRes.value.data.data.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            period: b.startDate ? `${b.startDate} to ${b.endDate}` : 'FY 2026-27',
+            responsible: b.responsibleUser || 'Lead Accountant',
+            analyticAccount: b.analyticAccount,
+            plannedAmount: Number(b.plannedAmount),
+            actualAmount: Number(b.actualAmount || 0),
+            remainingAmount: Number(b.remainingAmount || 0),
+            utilization: Number(b.utilization || 0),
+            status: b.status || 'HEALTHY',
+          }))
+        );
+      }
+    } catch {
+      // Retrying silently in background
+    }
+  }, []);
+
+  // Initial load and periodic 5-second polling + browser tab focus listeners
+  useEffect(() => {
+    refreshFromBackend();
+
+    const interval = setInterval(refreshFromBackend, 5000);
+
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        refreshFromBackend();
+      }
+    };
+
+    window.addEventListener('focus', onVisibilityOrFocus);
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+    };
+  }, [refreshFromBackend]);
   const createSalesOrder = useCallback((order: Omit<SalesOrder, 'id' | 'orderNumber'> & { status?: SalesOrder['status'] }): SalesOrder => {
     const id = `so-${Date.now()}`;
     const orderNumber = `SO-2026-00${salesOrders.length + 1}`;
@@ -208,14 +559,32 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       status: order.status || 'CONFIRMED',
     };
     setSalesOrders((prev) => [newSO, ...prev]);
+
+    // Dispatch to live PostgreSQL backend
+    apiClient.post('/sales', {
+      customerId: order.customerId,
+      orderDate: order.orderDate,
+      lines: order.lines.map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+      })),
+    }).catch((e) => console.warn('Backend SO sync error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+
     return newSO;
-  }, [salesOrders.length]);
+  }, [salesOrders.length, refreshFromBackend]);
 
   const confirmSalesOrder = useCallback((id: string) => {
     setSalesOrders((prev) =>
       prev.map((so) => (so.id === id ? { ...so, status: 'CONFIRMED' } : so))
     );
-  }, []);
+
+    apiClient.post(`/sales/${id}/confirm`).catch((e) => console.warn('Confirm SO sync error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+  }, [refreshFromBackend]);
 
   const generateInvoiceFromSO = useCallback((orderId: string): Invoice | null => {
     const order = salesOrders.find((so) => so.id === orderId);
@@ -320,8 +689,12 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     setJournalEntries((prev) => [newJE, ...prev]);
     setInvoices((prev) => [newInvoice, ...prev]);
 
+    apiClient.post(`/sales/${orderId}/invoice`).catch((e) => console.warn('Invoice SO sync error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+
     return newInvoice;
-  }, [salesOrders, invoices.length, journalEntries.length]);
+  }, [salesOrders, invoices.length, journalEntries.length, refreshFromBackend]);
 
   // ────────────────────────────────────────────────────────
   // PURCHASES ACTIONS
@@ -336,14 +709,31 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       status: po.status || 'CONFIRMED',
     };
     setPurchaseOrders((prev) => [newPO, ...prev]);
+
+    apiClient.post('/purchases', {
+      vendorId: po.vendorId,
+      orderDate: po.orderDate,
+      lines: po.lines.map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+      })),
+    }).catch((e) => console.warn('Backend PO sync error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+
     return newPO;
-  }, [purchaseOrders.length]);
+  }, [purchaseOrders.length, refreshFromBackend]);
 
   const confirmPurchaseOrder = useCallback((id: string) => {
     setPurchaseOrders((prev) =>
       prev.map((po) => (po.id === id ? { ...po, status: 'CONFIRMED' } : po))
     );
-  }, []);
+
+    apiClient.post(`/purchases/${id}/confirm`).catch((e) => console.warn('Confirm PO sync error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+  }, [refreshFromBackend]);
 
   const generateBillFromPO = useCallback((poId: string): Bill | null => {
     const po = purchaseOrders.find((p) => p.id === poId);
@@ -445,8 +835,12 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     setJournalEntries((prev) => [newJE, ...prev]);
     setBills((prev) => [newBill, ...prev]);
 
+    apiClient.post(`/purchases/${poId}/bill`).catch((e) => console.warn('Bill PO sync error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+
     return newBill;
-  }, [purchaseOrders, bills.length, journalEntries.length]);
+  }, [purchaseOrders, bills.length, journalEntries.length, refreshFromBackend]);
 
   // ────────────────────────────────────────────────────────
   // INVOICE & BILL CREATION
@@ -524,8 +918,22 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     setJournalEntries((prev) => [newJE, ...prev]);
     setInvoices((prev) => [newInvoice, ...prev]);
 
+    apiClient.post('/invoices', {
+      customerId: inv.customerId,
+      issueDate: inv.issueDate,
+      dueDate: inv.dueDate,
+      lines: inv.lines.map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        description: l.productName,
+      })),
+    }).catch((e) => console.warn('Sync invoice error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+
     return newInvoice;
-  }, [invoices.length, journalEntries.length]);
+  }, [invoices.length, journalEntries.length, refreshFromBackend]);
 
   const createBill = useCallback((b: Omit<Bill, 'id' | 'billNumber' | 'journalEntryId'>): Bill => {
     const billId = `bill-${Date.now()}`;
@@ -599,8 +1007,22 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     setJournalEntries((prev) => [newJE, ...prev]);
     setBills((prev) => [newBill, ...prev]);
 
+    apiClient.post('/bills', {
+      vendorId: b.vendorId,
+      billDate: b.billDate,
+      dueDate: b.dueDate,
+      lines: b.lines.map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        description: l.productName,
+      })),
+    }).catch((e) => console.warn('Sync bill error:', e)).finally(() => {
+      setTimeout(refreshFromBackend, 300);
+    });
+
     return newBill;
-  }, [bills.length, journalEntries.length]);
+  }, [bills.length, journalEntries.length, refreshFromBackend]);
 
   // ────────────────────────────────────────────────────────
   // PAYMENT REGISTRATION
@@ -710,9 +1132,23 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       setJournalEntries((prev) => [newJE, ...prev]);
       setPayments((prev) => [payment, ...prev]);
 
+      apiClient
+        .post('/payments', {
+          type: 'CUSTOMER_PAYMENT',
+          contactId: inv.customerId,
+          amount,
+          method: journal === 'CASH' ? 'CASH' : 'BANK',
+          invoiceId,
+          referenceDoc: inv.invoiceNumber,
+        })
+        .catch((e) => console.warn('Sync payment error:', e))
+        .finally(() => {
+          setTimeout(refreshFromBackend, 300);
+        });
+
       return payment;
     },
-    [invoices, payments.length, journalEntries.length]
+    [invoices, payments.length, journalEntries.length, refreshFromBackend]
   );
 
   const registerVendorPayment = useCallback(
@@ -820,9 +1256,23 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       setJournalEntries((prev) => [newJE, ...prev]);
       setPayments((prev) => [payment, ...prev]);
 
+      apiClient
+        .post('/payments', {
+          type: 'VENDOR_PAYMENT',
+          contactId: b.vendorId,
+          amount,
+          method: journal === 'CASH' ? 'CASH' : 'BANK',
+          billId,
+          referenceDoc: b.billNumber,
+        })
+        .catch((e) => console.warn('Sync vendor payment error:', e))
+        .finally(() => {
+          setTimeout(refreshFromBackend, 300);
+        });
+
       return payment;
     },
-    [bills, payments.length, journalEntries.length]
+    [bills, payments.length, journalEntries.length, refreshFromBackend]
   );
 
   const createDirectPayment = useCallback(
@@ -891,7 +1341,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
             if (acc.id === 'acc-1003') return { ...acc, balance: Math.max(0, acc.balance - amount) };
           } else {
             if (acc.id === 'acc-2001') return { ...acc, balance: Math.max(0, acc.balance - amount) };
-            if (acc.id === targetBankCashAccount) return { ...acc, balance: acc.balance - amount };
+            if (acc.id === targetBankCashAccount) return { ...acc, balance: -amount };
           }
           return acc;
         })
@@ -900,9 +1350,22 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       setJournalEntries((prev) => [newJE, ...prev]);
       setPayments((prev) => [payment, ...prev]);
 
+      apiClient
+        .post('/payments', {
+          type,
+          contactId,
+          amount,
+          method: journal === 'CASH' ? 'CASH' : 'BANK',
+          referenceDoc: docRef,
+        })
+        .catch((e) => console.warn('Sync direct payment error:', e))
+        .finally(() => {
+          setTimeout(refreshFromBackend, 300);
+        });
+
       return payment;
     },
-    [contacts, payments.length, journalEntries.length]
+    [contacts, payments.length, journalEntries.length, refreshFromBackend]
   );
 
   // ────────────────────────────────────────────────────────
@@ -917,8 +1380,24 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       totalPayable: 0,
     };
     setContacts((prev) => [newC, ...prev]);
+
+    apiClient
+      .post('/contacts', {
+        name: c.name,
+        type: c.type,
+        email: c.email || undefined,
+        mobile: c.mobile || undefined,
+        city: c.city || undefined,
+        state: c.state || undefined,
+        pincode: c.pincode || undefined,
+      })
+      .catch((e) => console.warn('Sync contact error:', e))
+      .finally(() => {
+        setTimeout(refreshFromBackend, 300);
+      });
+
     return newC;
-  }, []);
+  }, [refreshFromBackend]);
 
   const updateContact = useCallback((id: string, updates: Partial<ContactItem>) => {
     setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
@@ -954,8 +1433,22 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       isActive: true,
     };
     setProducts((prev) => [newP, ...prev]);
+
+    apiClient
+      .post('/products', {
+        name: p.name,
+        type: p.type,
+        salesPrice: p.salesPrice,
+        purchasePrice: p.purchasePrice,
+        category: p.category,
+      })
+      .catch((e) => console.warn('Sync product error:', e))
+      .finally(() => {
+        setTimeout(refreshFromBackend, 300);
+      });
+
     return newP;
-  }, []);
+  }, [refreshFromBackend]);
 
   const updateProduct = useCallback((id: string, updates: Partial<ProductItem>) => {
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
@@ -988,8 +1481,23 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       status: 'HEALTHY',
     };
     setBudgets((prev) => [newB, ...prev]);
+
+    apiClient
+      .post('/budgeting/budgets', {
+        name: budget.name,
+        analyticAccount: budget.analyticAccount,
+        plannedAmount: budget.plannedAmount,
+        startDate: '2026-04-01',
+        endDate: '2026-09-30',
+        responsibleUser: budget.responsible,
+      })
+      .catch((e) => console.warn('Sync budget error:', e))
+      .finally(() => {
+        setTimeout(refreshFromBackend, 300);
+      });
+
     return newB;
-  }, []);
+  }, [refreshFromBackend]);
 
   // ────────────────────────────────────────────────────────
   // DYNAMIC DASHBOARD METRICS CALCULATION
@@ -1080,6 +1588,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         addAnalyticAccount,
         addBudget,
         getDashboardMetricsData,
+        refreshERPData: refreshFromBackend,
         resetDemoData,
       }}
     >

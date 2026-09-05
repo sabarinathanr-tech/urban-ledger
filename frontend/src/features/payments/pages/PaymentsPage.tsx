@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   X,
   BookOpen,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +36,7 @@ export function PaymentsPage() {
     payments,
     createDirectPayment,
     contacts,
+    refreshERPData,
   } = useERP();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -146,17 +148,26 @@ export function PaymentsPage() {
         </div>
 
         {!isContact && (
-          <Button
-            variant="primary"
-            onClick={() => {
-              navigate(ROUTES.PAYMENTS_NEW);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-1.5"
-          >
-            <Plus size={16} />
-            <span>Record Payment</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={refreshERPData}
+              title="Refresh"
+              className="p-1.5 text-text-muted hover:text-navy-900 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+            >
+              <RefreshCw size={14} />
+            </button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                navigate(ROUTES.PAYMENTS_NEW);
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-1.5"
+            >
+              <Plus size={16} />
+              <span>Record Payment</span>
+            </Button>
+          </div>
         )}
       </div>
 

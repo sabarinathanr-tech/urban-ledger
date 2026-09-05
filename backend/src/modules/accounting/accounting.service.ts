@@ -1,7 +1,9 @@
+import { Prisma } from '@prisma/client';
 import { prisma, isDatabaseAvailable } from '../../config/db.js';
 import { seedAccounts } from '../../../prisma/seed-data/accounts.js';
 import { seedJournals } from '../../../prisma/seed-data/journals.js';
 import { BadRequestError, NotFoundError } from '../../utils/errors.js';
+import { logger } from '../../utils/logger.js';
 
 export interface AccountRecord {
   id: string;
@@ -233,15 +235,123 @@ export class AccountingService {
   }
 
   public async getChartOfAccounts(): Promise<AccountRecord[]> {
+    if (isDatabaseAvailable()) {
+      try {
+        const dbAccounts = await prisma.account.findMany({
+          include: {
+            journalLines: {
+              include: { journalEntry: true },
+            },
+          },
+          orderBy: { code: 'asc' },
+        });
+
+        if (dbAccounts.length > 0) {
+          return dbAccounts.map((a) => {
+            let debitBalance = 0;
+            let creditBalance = 0;
+            for (const line of a.journalLines) {
+              if (line.journalEntry.status === 'POSTED') {
+                debitBalance += Number(line.debit);
+                creditBalance += Number(line.credit);
+              }
+            }
+            const balance =
+              a.type === 'ASSET' || a.type === 'EXPENSE'
+                ? debitBalance - creditBalance
+                : creditBalance - debitBalance;
+
+            return {
+              id: a.id,
+              name: a.name,
+              code: a.code,
+              type: a.type,
+              isActive: a.isActive,
+              debitBalance: Number(debitBalance.toFixed(2)),
+              creditBalance: Number(creditBalance.toFixed(2)),
+              balance: Number(balance.toFixed(2)),
+            };
+          });
+        }
+      } catch (err) {
+        logger.warn('Failed to query accounts from Prisma, falling back to memory', err);
+      }
+    }
+
     this.recalculateBalances();
     return Array.from(memoryAccounts.values()).sort((a, b) => a.code.localeCompare(b.code));
   }
 
   public async getJournals(): Promise<JournalRecord[]> {
+    if (isDatabaseAvailable()) {
+      try {
+        const dbJournals = await prisma.journal.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        });
+        if (dbJournals.length > 0) {
+          return dbJournals.map((j) => ({
+            id: j.id,
+            name: j.name,
+            type: j.type,
+            defaultDebitAccountId: j.defaultDebitAccountId || undefined,
+            defaultCreditAccountId: j.defaultCreditAccountId || undefined,
+            isActive: j.isActive,
+          }));
+        }
+      } catch (err) {
+        logger.warn('Failed to query journals from Prisma, falling back to memory', err);
+      }
+    }
+
     return Array.from(memoryJournals.values());
   }
 
   public async getJournalEntries(): Promise<JournalEntryRecord[]> {
+    if (isDatabaseAvailable()) {
+      try {
+        const entries = await prisma.journalEntry.findMany({
+          include: {
+            journal: true,
+            lines: { include: { account: true } },
+          },
+          orderBy: { date: 'desc' },
+        });
+        if (entries.length > 0) {
+          return entries.map((e) => {
+            const mappedLines: JournalEntryLineDraft[] = e.lines.map((l) => ({
+              id: l.id,
+              accountId: l.accountId,
+              accountName: l.account?.name || 'Account',
+              accountCode: l.account?.code || '',
+              debit: Number(l.debit),
+              credit: Number(l.credit),
+              description: l.description || undefined,
+              analyticAccountId: l.analyticAccountId || undefined,
+            }));
+            const totalDebit = Number(mappedLines.reduce((s, l) => s + l.debit, 0).toFixed(2));
+            const totalCredit = Number(mappedLines.reduce((s, l) => s + l.credit, 0).toFixed(2));
+            return {
+              id: e.id,
+              journalId: e.journalId,
+              journalName: e.journal?.name || 'General Journal',
+              date: e.date instanceof Date ? e.date.toISOString().split('T')[0] : String(e.date).split('T')[0],
+              reference: e.reference,
+              sourceType: e.sourceType || undefined,
+              sourceId: e.sourceId || undefined,
+              status: e.status,
+              lines: mappedLines,
+              totalDebit,
+              totalCredit,
+              createdAt: e.createdAt,
+            };
+          });
+        }
+      } catch (err) {
+        logger.warn('Failed to query journal entries from Prisma, falling back to memory', err);
+      }
+    }
+
     return Array.from(memoryEntries.values()).sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
@@ -308,7 +418,52 @@ export class AccountingService {
       createdAt: new Date(),
     };
 
-    memoryEntries.set(id, newEntry);
+    if (isDatabaseAvailable()) {
+      try {
+        const dbJournal = await prisma.journal.findFirst({
+          where: { OR: [{ id: input.journalId }, { type: (journal.type as any) }] },
+        });
+
+        const dbAccounts = await prisma.account.findMany();
+        const accountByCode = new Map(dbAccounts.map((a) => [a.code, a.id]));
+        const accountById = new Map(dbAccounts.map((a) => [a.id, a.id]));
+
+        const linesToCreate = input.lines.map((l) => {
+          const accMem = memoryAccounts.get(l.accountId);
+          const resolvedAccountId =
+            accountById.get(l.accountId) ||
+            (accMem ? accountByCode.get(accMem.code) : undefined) ||
+            dbAccounts[0]?.id;
+
+          return {
+            accountId: resolvedAccountId!,
+            description: l.description || '',
+            debit: new Prisma.Decimal(l.debit || 0),
+            credit: new Prisma.Decimal(l.credit || 0),
+            analyticAccountId: l.analyticAccountId || undefined,
+          };
+        });
+
+        const created = await prisma.journalEntry.create({
+          data: {
+            journalId: dbJournal?.id || input.journalId,
+            date: new Date(input.date),
+            reference: input.reference,
+            sourceType: input.sourceType,
+            sourceId: input.sourceId,
+            status: 'POSTED',
+            lines: {
+              create: linesToCreate,
+            },
+          },
+        });
+        newEntry.id = created.id;
+      } catch (err) {
+        logger.warn('Failed to persist journal entry to Prisma, falling back to memory', err);
+      }
+    }
+
+    memoryEntries.set(newEntry.id, newEntry);
     this.recalculateBalances();
 
     return newEntry;

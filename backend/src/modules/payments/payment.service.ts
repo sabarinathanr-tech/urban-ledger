@@ -1,8 +1,11 @@
+import { Prisma } from '@prisma/client';
+import { prisma, isDatabaseAvailable } from '../../config/db.js';
 import { contactService } from '../contacts/contact.service.js';
 import { invoiceService } from '../invoices/invoice.service.js';
 import { billService } from '../bills/bill.service.js';
 import { accountingService } from '../accounting/accounting.service.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../../utils/errors.js';
+import { logger } from '../../utils/logger.js';
 import type { CreatePaymentInput, ListPaymentsQuery } from './payment.schema.js';
 import type { AuthUserPayload } from '../../middleware/auth.middleware.js';
 
@@ -48,12 +51,73 @@ memoryPayments.set(seedPayment.id, seedPayment);
 
 let paymentCounter = 32;
 
+function mapPrismaPaymentToRecord(p: any): PaymentRecord {
+  const isCustomerPayment = !!p.invoiceId || (p.invoice && !p.bill);
+  const contact = p.invoice?.customer || p.bill?.vendor;
+  return {
+    id: p.id,
+    paymentNumber: p.reference,
+    type: isCustomerPayment ? 'CUSTOMER_PAYMENT' : 'VENDOR_PAYMENT',
+    contactId: contact?.id || p.contactId || '',
+    contactName: contact?.name || 'Contact',
+    contactEmail: contact?.email || undefined,
+    amount: Number(p.amount),
+    method: p.method,
+    paymentDate: p.paymentDate instanceof Date ? p.paymentDate.toISOString().split('T')[0] : String(p.paymentDate).split('T')[0],
+    invoiceId: p.invoiceId || undefined,
+    billId: p.billId || undefined,
+    referenceDoc: p.invoice?.reference || p.bill?.reference || undefined,
+    journalEntryId: p.journalEntryId || undefined,
+    status: 'COMPLETED',
+    createdAt: p.createdAt,
+  };
+}
+
 export class PaymentService {
   public async listPayments(
     query: ListPaymentsQuery,
     user?: AuthUserPayload
   ): Promise<{ items: PaymentRecord[]; total: number }> {
     const { page, limit, search, type, method, contactId } = query;
+
+    if (isDatabaseAvailable()) {
+      try {
+        const where: any = {};
+        if (method) where.method = method;
+        if (type === 'CUSTOMER_PAYMENT') {
+          where.invoiceId = { not: null };
+        } else if (type === 'VENDOR_PAYMENT') {
+          where.billId = { not: null };
+        }
+        if (search) {
+          where.OR = [
+            { reference: { contains: search, mode: 'insensitive' } },
+            { invoice: { reference: { contains: search, mode: 'insensitive' } } },
+            { bill: { reference: { contains: search, mode: 'insensitive' } } },
+            { invoice: { customer: { name: { contains: search, mode: 'insensitive' } } } },
+            { bill: { vendor: { name: { contains: search, mode: 'insensitive' } } } },
+          ];
+        }
+
+        const [items, total] = await Promise.all([
+          prisma.payment.findMany({
+            where,
+            include: {
+              invoice: { include: { customer: true } },
+              bill: { include: { vendor: true } },
+            },
+            skip: (page - 1) * limit,
+            take: limit,
+            orderBy: { paymentDate: 'desc' },
+          }),
+          prisma.payment.count({ where }),
+        ]);
+
+        return { items: items.map(mapPrismaPaymentToRecord), total };
+      } catch (err) {
+        logger.warn('Failed to query payments from Prisma, falling back to memory', err);
+      }
+    }
 
     let all = Array.from(memoryPayments.values());
 
@@ -90,6 +154,21 @@ export class PaymentService {
   }
 
   public async getPaymentById(id: string, user?: AuthUserPayload): Promise<PaymentRecord> {
+    if (isDatabaseAvailable()) {
+      try {
+        const payment = await prisma.payment.findFirst({
+          where: { OR: [{ id }, { reference: { equals: id, mode: 'insensitive' } }] },
+          include: {
+            invoice: { include: { customer: true } },
+            bill: { include: { vendor: true } },
+          },
+        });
+        if (payment) return mapPrismaPaymentToRecord(payment);
+      } catch (err) {
+        logger.warn('Failed to get payment from Prisma, falling back to memory', err);
+      }
+    }
+
     const payment = memoryPayments.get(id);
     if (!payment) {
       throw new NotFoundError('Payment record not found');
@@ -164,6 +243,39 @@ export class PaymentService {
       paymentDate,
       referenceDoc,
     });
+
+    if (isDatabaseAvailable()) {
+      try {
+        const journal = await prisma.journal.findFirst({
+          where: { type: input.method === 'BANK' ? 'BANK' : 'CASH' },
+        });
+
+        if (journal) {
+          const created = await prisma.payment.create({
+            data: {
+              reference: paymentNumber,
+              invoiceId: input.invoiceId || undefined,
+              billId: input.billId || undefined,
+              paymentDate: new Date(paymentDate),
+              amount: new Prisma.Decimal(input.amount),
+              method: input.method,
+              journalId: journal.id,
+              journalEntryId: entry.id,
+              status: 'POSTED',
+            },
+            include: {
+              invoice: { include: { customer: true } },
+              bill: { include: { vendor: true } },
+            },
+          });
+          const mapped = mapPrismaPaymentToRecord(created);
+          memoryPayments.set(created.id, mapped);
+          return mapped;
+        }
+      } catch (err) {
+        logger.warn('Failed to persist payment to Prisma, falling back to memory', err);
+      }
+    }
 
     const newPayment: PaymentRecord = {
       id,

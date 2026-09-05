@@ -1,7 +1,10 @@
+import { Prisma } from '@prisma/client';
+import { prisma, isDatabaseAvailable } from '../../config/db.js';
 import { contactService } from '../contacts/contact.service.js';
 import { productService } from '../products/product.service.js';
 import { accountingService } from '../accounting/accounting.service.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../../utils/errors.js';
+import { logger } from '../../utils/logger.js';
 import type { CreateBillInput, ListBillsQuery } from './bill.schema.js';
 import type { AuthUserPayload } from '../../middleware/auth.middleware.js';
 
@@ -83,12 +86,115 @@ memoryBills.set(seedBill.id, seedBill);
 
 let billCounter = 20;
 
+function mapPrismaBillToRecord(b: any): BillRecord {
+  let displayStatus: 'DRAFT' | 'POSTED' | 'PAID' | 'OVERDUE' | 'CANCELLED' = 'POSTED';
+  if (b.status === 'DRAFT') {
+    displayStatus = 'DRAFT';
+  } else if (b.status === 'CANCELLED') {
+    displayStatus = 'CANCELLED';
+  } else if (b.paymentStatus === 'PAID' || Number(b.outstandingAmount) <= 0.01) {
+    displayStatus = 'PAID';
+  } else if (new Date() > new Date(b.dueDate)) {
+    displayStatus = 'OVERDUE';
+  } else {
+    displayStatus = 'POSTED';
+  }
+
+  return {
+    id: b.id,
+    billNumber: b.reference,
+    vendorId: b.vendorId,
+    vendorName: b.vendor?.name || 'Vendor',
+    vendorEmail: b.vendor?.email || undefined,
+    purchaseOrderId: b.purchaseOrderId || undefined,
+    billDate: b.billDate instanceof Date ? b.billDate.toISOString().split('T')[0] : String(b.billDate).split('T')[0],
+    dueDate: b.dueDate instanceof Date ? b.dueDate.toISOString().split('T')[0] : String(b.dueDate).split('T')[0],
+    status: displayStatus,
+    lines: (b.lines || []).map((l: any) => ({
+      id: l.id,
+      productId: l.productId,
+      productName: l.product?.name || l.description || 'Product',
+      quantity: Number(l.quantity),
+      unitPrice: Number(l.unitPrice),
+      subtotal: Number(l.lineSubtotal),
+      tax: Number(l.lineTax),
+      total: Number(l.lineTotal),
+    })),
+    subtotal: Number(b.subtotal),
+    taxTotal: Number(b.taxAmount),
+    grandTotal: Number(b.totalAmount),
+    amountPaid: Number(b.paidAmount || 0),
+    balanceDue: Number(b.outstandingAmount),
+    journalEntryId: b.journalEntryId || undefined,
+    createdAt: b.createdAt,
+  };
+}
+
 export class BillService {
   public async listBills(
     query: ListBillsQuery,
     user?: AuthUserPayload
   ): Promise<{ items: BillRecord[]; total: number }> {
     const { page, limit, search, status, vendorId } = query;
+
+    if (isDatabaseAvailable()) {
+      try {
+        const where: any = {};
+
+        if (user && user.role === 'CONTACT') {
+          where.OR = [
+            { vendorId: user.userId },
+            { vendor: { email: { equals: user.email, mode: 'insensitive' } } },
+          ];
+        } else if (vendorId) {
+          where.vendorId = vendorId;
+        }
+
+        if (status) {
+          if (status === 'PAID') {
+            where.paymentStatus = 'PAID';
+          } else if (status === 'OVERDUE') {
+            where.paymentStatus = { not: 'PAID' };
+            where.dueDate = { lt: new Date() };
+            where.status = 'POSTED';
+          } else if (status === 'POSTED') {
+            where.status = 'POSTED';
+          } else if (status === 'DRAFT') {
+            where.status = 'DRAFT';
+          } else if (status === 'CANCELLED') {
+            where.status = 'CANCELLED';
+          }
+        }
+
+        if (search) {
+          where.OR = [
+            { reference: { contains: search, mode: 'insensitive' } },
+            { vendor: { name: { contains: search, mode: 'insensitive' } } },
+          ];
+        }
+
+        const [items, total] = await Promise.all([
+          prisma.bill.findMany({
+            where,
+            include: {
+              vendor: true,
+              lines: { include: { product: true } },
+            },
+            skip: (page - 1) * limit,
+            take: limit,
+            orderBy: { billDate: 'desc' },
+          }),
+          prisma.bill.count({ where }),
+        ]);
+
+        return {
+          items: items.map(mapPrismaBillToRecord),
+          total,
+        };
+      } catch (err) {
+        logger.warn('Failed to query bills from Prisma, falling back to memory', err);
+      }
+    }
 
     let all = Array.from(memoryBills.values());
 
@@ -124,6 +230,38 @@ export class BillService {
   }
 
   public async getBillById(id: string, user?: AuthUserPayload): Promise<BillRecord> {
+    if (isDatabaseAvailable()) {
+      try {
+        const bill = await prisma.bill.findFirst({
+          where: {
+            OR: [
+              { id },
+              { reference: { equals: id, mode: 'insensitive' } },
+            ],
+          },
+          include: {
+            vendor: true,
+            lines: { include: { product: true } },
+          },
+        });
+
+        if (bill) {
+          if (user && user.role === 'CONTACT') {
+            const isOwner =
+              bill.vendorId === user.userId ||
+              (user.email && bill.vendor?.email?.toLowerCase() === user.email.toLowerCase());
+            if (!isOwner) {
+              throw new ForbiddenError('You do not have permission to view this vendor bill');
+            }
+          }
+          return mapPrismaBillToRecord(bill);
+        }
+      } catch (err) {
+        if (err instanceof ForbiddenError) throw err;
+        logger.warn('Failed to get bill from Prisma, falling back to memory', err);
+      }
+    }
+
     const bill = memoryBills.get(id);
     if (!bill) {
       throw new NotFoundError('Vendor bill not found');
@@ -190,6 +328,47 @@ export class BillService {
       billDate,
     });
 
+    if (isDatabaseAvailable()) {
+      try {
+        const createdBill = await prisma.bill.create({
+          data: {
+            reference: billNumber,
+            vendorId: vendor.id,
+            purchaseOrderId: input.purchaseOrderId || undefined,
+            journalEntryId: entry.id,
+            billDate: new Date(billDate),
+            dueDate: new Date(dueDate),
+            status: 'POSTED',
+            paymentStatus: 'UNPAID',
+            subtotal: new Prisma.Decimal(subtotal),
+            taxAmount: new Prisma.Decimal(taxTotal),
+            totalAmount: new Prisma.Decimal(grandTotal),
+            paidAmount: new Prisma.Decimal(0),
+            outstandingAmount: new Prisma.Decimal(grandTotal),
+            lines: {
+              create: lines.map((l) => ({
+                productId: l.productId,
+                description: l.productName,
+                quantity: new Prisma.Decimal(l.quantity),
+                unitPrice: new Prisma.Decimal(l.unitPrice),
+                taxRate: new Prisma.Decimal(18),
+                lineSubtotal: new Prisma.Decimal(l.subtotal),
+                lineTax: new Prisma.Decimal(l.tax),
+                lineTotal: new Prisma.Decimal(l.total),
+              })),
+            },
+          },
+          include: { vendor: true, lines: { include: { product: true } } },
+        });
+
+        const mapped = mapPrismaBillToRecord(createdBill);
+        memoryBills.set(createdBill.id, mapped);
+        return mapped;
+      } catch (err) {
+        logger.warn('Failed to persist bill to Prisma, falling back to memory', err);
+      }
+    }
+
     const newBill: BillRecord = {
       id,
       billNumber,
@@ -218,10 +397,50 @@ export class BillService {
     billId: string,
     amount: number
   ): Promise<BillRecord> {
+    if (amount <= 0) throw new BadRequestError('Payment amount must be greater than 0');
+
+    if (isDatabaseAvailable()) {
+      try {
+        const bill = await prisma.bill.findFirst({
+          where: { OR: [{ id: billId }, { reference: { equals: billId, mode: 'insensitive' } }] },
+          include: { vendor: true, lines: { include: { product: true } } },
+        });
+
+        if (bill) {
+          const balanceDue = Number(bill.outstandingAmount);
+          if (amount > balanceDue + 0.01) {
+            throw new BadRequestError(
+              `Payment (₹${amount.toLocaleString('en-IN')}) exceeds remaining balance (₹${balanceDue.toLocaleString('en-IN')}).`
+            );
+          }
+
+          const newPaid = Number((Number(bill.paidAmount) + amount).toFixed(2));
+          const newBalance = Math.max(0, Number((Number(bill.totalAmount) - newPaid).toFixed(2)));
+          const newStatus = newBalance <= 0.01 ? 'PAID' : 'PARTIALLY_PAID';
+
+          const updated = await prisma.bill.update({
+            where: { id: bill.id },
+            data: {
+              paidAmount: new Prisma.Decimal(newPaid),
+              outstandingAmount: new Prisma.Decimal(newBalance),
+              paymentStatus: newStatus,
+            },
+            include: { vendor: true, lines: { include: { product: true } } },
+          });
+
+          const mapped = mapPrismaBillToRecord(updated);
+          memoryBills.set(updated.id, mapped);
+          return mapped;
+        }
+      } catch (err) {
+        if (err instanceof BadRequestError) throw err;
+        logger.warn('Failed to settle bill in Prisma, falling back to memory', err);
+      }
+    }
+
     const bill = memoryBills.get(billId);
     if (!bill) throw new NotFoundError('Vendor bill not found');
 
-    if (amount <= 0) throw new BadRequestError('Payment amount must be greater than 0');
     if (amount > bill.balanceDue + 0.01) {
       throw new BadRequestError(
         `Payment (₹${amount.toLocaleString('en-IN')}) exceeds remaining balance (₹${bill.balanceDue.toLocaleString('en-IN')}).`

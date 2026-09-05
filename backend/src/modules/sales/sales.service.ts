@@ -1,7 +1,10 @@
+import { Prisma } from '@prisma/client';
+import { prisma, isDatabaseAvailable } from '../../config/db.js';
 import { contactService } from '../contacts/contact.service.js';
 import { productService } from '../products/product.service.js';
 import { invoiceService } from '../invoices/invoice.service.js';
 import { NotFoundError, BadRequestError } from '../../utils/errors.js';
+import { logger } from '../../utils/logger.js';
 import type { CreateSalesOrderInput, ListSalesOrdersQuery } from './sales.schema.js';
 
 export interface SalesOrderLineRecord {
@@ -73,9 +76,64 @@ memorySalesOrders.set(seedSalesOrder.id, seedSalesOrder);
 
 let orderCounter = 2;
 
+function mapPrismaSalesOrderToRecord(so: any): SalesOrderRecord {
+  return {
+    id: so.id,
+    orderNumber: so.reference,
+    customerId: so.customerId,
+    customerName: so.customer?.name || 'Customer',
+    orderDate: so.orderDate instanceof Date ? so.orderDate.toISOString().split('T')[0] : String(so.orderDate).split('T')[0],
+    status: so.status,
+    lines: (so.lines || []).map((l: any) => ({
+      id: l.id,
+      productId: l.productId,
+      productName: l.product?.name || 'Product',
+      quantity: Number(l.quantity),
+      unitPrice: Number(l.unitPrice),
+      subtotal: Number(l.lineSubtotal),
+      tax: Number(l.lineTax),
+      total: Number(l.lineTotal),
+    })),
+    subtotal: Number(so.subtotal),
+    taxTotal: Number(so.taxAmount),
+    grandTotal: Number(so.totalAmount),
+    invoiceId: so.invoices?.[0]?.id || undefined,
+    createdAt: so.createdAt,
+  };
+}
+
 export class SalesService {
   public async listSalesOrders(query: ListSalesOrdersQuery): Promise<{ items: SalesOrderRecord[]; total: number }> {
     const { page, limit, search, status, customerId } = query;
+
+    if (isDatabaseAvailable()) {
+      try {
+        const where: any = {};
+        if (status) where.status = status;
+        if (customerId) where.customerId = customerId;
+        if (search) {
+          where.OR = [
+            { reference: { contains: search, mode: 'insensitive' } },
+            { customer: { name: { contains: search, mode: 'insensitive' } } },
+          ];
+        }
+
+        const [items, total] = await Promise.all([
+          prisma.salesOrder.findMany({
+            where,
+            include: { customer: true, lines: { include: { product: true } }, invoices: true },
+            skip: (page - 1) * limit,
+            take: limit,
+            orderBy: { orderDate: 'desc' },
+          }),
+          prisma.salesOrder.count({ where }),
+        ]);
+
+        return { items: items.map(mapPrismaSalesOrderToRecord), total };
+      } catch (err) {
+        logger.warn('Failed to query sales orders from Prisma, falling back to memory', err);
+      }
+    }
 
     let all = Array.from(memorySalesOrders.values());
     if (status) all = all.filter((o) => o.status === status);
@@ -99,6 +157,18 @@ export class SalesService {
   }
 
   public async getSalesOrderById(id: string): Promise<SalesOrderRecord> {
+    if (isDatabaseAvailable()) {
+      try {
+        const order = await prisma.salesOrder.findFirst({
+          where: { OR: [{ id }, { reference: { equals: id, mode: 'insensitive' } }] },
+          include: { customer: true, lines: { include: { product: true } }, invoices: true },
+        });
+        if (order) return mapPrismaSalesOrderToRecord(order);
+      } catch (err) {
+        logger.warn('Failed to get sales order from Prisma, falling back to memory', err);
+      }
+    }
+
     const order = memorySalesOrders.get(id);
     if (!order) {
       throw new NotFoundError('Sales order not found');
@@ -141,6 +211,39 @@ export class SalesService {
     const id = `so_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const orderDate = input.orderDate || new Date().toISOString().split('T')[0];
 
+    if (isDatabaseAvailable()) {
+      try {
+        const created = await prisma.salesOrder.create({
+          data: {
+            reference: orderNumber,
+            customerId: customer.id,
+            orderDate: new Date(orderDate),
+            status: 'CONFIRMED',
+            subtotal: new Prisma.Decimal(subtotal),
+            taxAmount: new Prisma.Decimal(taxTotal),
+            totalAmount: new Prisma.Decimal(grandTotal),
+            lines: {
+              create: lines.map((l) => ({
+                productId: l.productId,
+                quantity: new Prisma.Decimal(l.quantity),
+                unitPrice: new Prisma.Decimal(l.unitPrice),
+                taxRate: new Prisma.Decimal(18),
+                lineSubtotal: new Prisma.Decimal(l.subtotal),
+                lineTax: new Prisma.Decimal(l.tax),
+                lineTotal: new Prisma.Decimal(l.total),
+              })),
+            },
+          },
+          include: { customer: true, lines: { include: { product: true } }, invoices: true },
+        });
+        const mapped = mapPrismaSalesOrderToRecord(created);
+        memorySalesOrders.set(created.id, mapped);
+        return mapped;
+      } catch (err) {
+        logger.warn('Failed to persist sales order to Prisma, falling back to memory', err);
+      }
+    }
+
     const newOrder: SalesOrderRecord = {
       id,
       orderNumber,
@@ -164,6 +267,22 @@ export class SalesService {
     if (order.status === 'CANCELLED') {
       throw new BadRequestError('Cannot confirm a cancelled sales order');
     }
+
+    if (isDatabaseAvailable()) {
+      try {
+        const updated = await prisma.salesOrder.update({
+          where: { id: order.id },
+          data: { status: 'CONFIRMED' },
+          include: { customer: true, lines: { include: { product: true } }, invoices: true },
+        });
+        const mapped = mapPrismaSalesOrderToRecord(updated);
+        memorySalesOrders.set(updated.id, mapped);
+        return mapped;
+      } catch {
+        // fallback
+      }
+    }
+
     order.status = 'CONFIRMED';
     memorySalesOrders.set(id, order);
     return order;
@@ -189,6 +308,21 @@ export class SalesService {
         unitPrice: l.unitPrice,
       })),
     });
+
+    if (isDatabaseAvailable()) {
+      try {
+        const updated = await prisma.salesOrder.update({
+          where: { id: order.id },
+          data: { status: 'INVOICED' },
+          include: { customer: true, lines: { include: { product: true } }, invoices: true },
+        });
+        const mapped = mapPrismaSalesOrderToRecord(updated);
+        memorySalesOrders.set(updated.id, mapped);
+        return { order: mapped, invoice };
+      } catch {
+        // fallback
+      }
+    }
 
     order.status = 'INVOICED';
     order.invoiceId = invoice.id;

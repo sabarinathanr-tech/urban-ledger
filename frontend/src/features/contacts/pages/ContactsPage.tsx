@@ -50,6 +50,7 @@ export function ContactsPage() {
     invoices,
     bills,
     payments,
+    refreshERPData,
   } = useERP();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -208,6 +209,7 @@ export function ContactsPage() {
         ]}
         activeFilter={typeFilter}
         onFilterChange={setTypeFilter}
+        onRefresh={refreshERPData}
       />
 
       {/* Main Content Area */}

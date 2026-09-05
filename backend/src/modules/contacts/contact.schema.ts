@@ -19,7 +19,7 @@ export const updateContactSchema = createContactSchema.partial().extend({
 
 export const listContactsQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(100).default(50),
+  limit: z.coerce.number().min(1).max(2000).default(50),
   search: z.string().optional(),
   type: z.enum(['CUSTOMER', 'VENDOR', 'BOTH']).optional(),
   isActive: z.enum(['true', 'false']).optional(),

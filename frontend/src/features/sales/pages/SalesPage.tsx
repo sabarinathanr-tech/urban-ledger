@@ -35,6 +35,7 @@ export function SalesPage() {
     generateInvoiceFromSO,
     contacts,
     products,
+    refreshERPData,
   } = useERP();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -191,6 +192,7 @@ export function SalesPage() {
         ]}
         activeFilter={statusFilter}
         onFilterChange={setStatusFilter}
+        onRefresh={refreshERPData}
       />
 
       {/* Main Content Area */}

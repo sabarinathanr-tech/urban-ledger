@@ -39,6 +39,7 @@ export function InvoicesPage() {
     registerCustomerPayment,
     contacts,
     products,
+    refreshERPData,
   } = useERP();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -225,6 +226,7 @@ export function InvoicesPage() {
         ]}
         activeFilter={statusFilter}
         onFilterChange={setStatusFilter}
+        onRefresh={refreshERPData}
       />
 
       {/* Main Content Area */}

@@ -32,7 +32,7 @@ type TabType = 'COA' | 'JOURNALS' | 'ENTRIES' | 'LEDGER' | 'FLOW';
 export function AccountingPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { accounts, journals, journalEntries, resetDemoData } = useERP();
+  const { accounts, journals, journalEntries, resetDemoData, refreshERPData } = useERP();
 
   const [activeTab, setActiveTab] = useState<TabType>('COA');
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>('ALL');
@@ -136,6 +136,15 @@ export function AccountingPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Refresh Live Data */}
+          <button
+            onClick={refreshERPData}
+            title="Refresh live data from PostgreSQL"
+            className="p-1.5 text-text-muted hover:text-navy-900 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+          >
+            <RefreshCw size={14} />
+          </button>
+
           {/* Reset Demo Data Button */}
           <Button
             variant="outline"

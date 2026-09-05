@@ -1,7 +1,10 @@
+import { Prisma } from '@prisma/client';
+import { prisma, isDatabaseAvailable } from '../../config/db.js';
 import { contactService } from '../contacts/contact.service.js';
 import { productService } from '../products/product.service.js';
 import { billService } from '../bills/bill.service.js';
 import { NotFoundError, BadRequestError } from '../../utils/errors.js';
+import { logger } from '../../utils/logger.js';
 import type { CreatePurchaseOrderInput, ListPurchaseOrdersQuery } from './purchase.schema.js';
 
 export interface PurchaseOrderLineRecord {
@@ -73,11 +76,66 @@ memoryPurchaseOrders.set(seedPurchaseOrder.id, seedPurchaseOrder);
 
 let poCounter = 2;
 
+function mapPrismaPurchaseOrderToRecord(po: any): PurchaseOrderRecord {
+  return {
+    id: po.id,
+    orderNumber: po.reference,
+    vendorId: po.vendorId,
+    vendorName: po.vendor?.name || 'Vendor',
+    orderDate: po.orderDate instanceof Date ? po.orderDate.toISOString().split('T')[0] : String(po.orderDate).split('T')[0],
+    status: po.status,
+    lines: (po.lines || []).map((l: any) => ({
+      id: l.id,
+      productId: l.productId,
+      productName: l.product?.name || 'Product',
+      quantity: Number(l.quantity),
+      unitPrice: Number(l.unitPrice),
+      subtotal: Number(l.lineSubtotal),
+      tax: Number(l.lineTax),
+      total: Number(l.lineTotal),
+    })),
+    subtotal: Number(po.subtotal),
+    taxTotal: Number(po.taxAmount),
+    grandTotal: Number(po.totalAmount),
+    billId: po.bills?.[0]?.id || undefined,
+    createdAt: po.createdAt,
+  };
+}
+
 export class PurchaseService {
   public async listPurchaseOrders(
     query: ListPurchaseOrdersQuery
   ): Promise<{ items: PurchaseOrderRecord[]; total: number }> {
     const { page, limit, search, status, vendorId } = query;
+
+    if (isDatabaseAvailable()) {
+      try {
+        const where: any = {};
+        if (status) where.status = status;
+        if (vendorId) where.vendorId = vendorId;
+        if (search) {
+          where.OR = [
+            { reference: { contains: search, mode: 'insensitive' } },
+            { vendor: { name: { contains: search, mode: 'insensitive' } } },
+          ];
+        }
+
+        const [items, total] = await Promise.all([
+          prisma.purchaseOrder.findMany({
+            where,
+            include: { vendor: true, lines: { include: { product: true } }, bills: true },
+            skip: (page - 1) * limit,
+            take: limit,
+            orderBy: { orderDate: 'desc' },
+          }),
+          prisma.purchaseOrder.count({ where }),
+        ]);
+
+        return { items: items.map(mapPrismaPurchaseOrderToRecord), total };
+      } catch (err) {
+        logger.warn('Failed to query purchase orders from Prisma, falling back to memory', err);
+      }
+    }
 
     let all = Array.from(memoryPurchaseOrders.values());
     if (status) all = all.filter((o) => o.status === status);
@@ -101,6 +159,18 @@ export class PurchaseService {
   }
 
   public async getPurchaseOrderById(id: string): Promise<PurchaseOrderRecord> {
+    if (isDatabaseAvailable()) {
+      try {
+        const order = await prisma.purchaseOrder.findFirst({
+          where: { OR: [{ id }, { reference: { equals: id, mode: 'insensitive' } }] },
+          include: { vendor: true, lines: { include: { product: true } }, bills: true },
+        });
+        if (order) return mapPrismaPurchaseOrderToRecord(order);
+      } catch (err) {
+        logger.warn('Failed to get purchase order from Prisma, falling back to memory', err);
+      }
+    }
+
     const order = memoryPurchaseOrders.get(id);
     if (!order) {
       throw new NotFoundError('Purchase order not found');
@@ -146,6 +216,39 @@ export class PurchaseService {
     const id = `po_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const orderDate = input.orderDate || new Date().toISOString().split('T')[0];
 
+    if (isDatabaseAvailable()) {
+      try {
+        const created = await prisma.purchaseOrder.create({
+          data: {
+            reference: orderNumber,
+            vendorId: vendor.id,
+            orderDate: new Date(orderDate),
+            status: 'CONFIRMED',
+            subtotal: new Prisma.Decimal(subtotal),
+            taxAmount: new Prisma.Decimal(taxTotal),
+            totalAmount: new Prisma.Decimal(grandTotal),
+            lines: {
+              create: lines.map((l) => ({
+                productId: l.productId,
+                quantity: new Prisma.Decimal(l.quantity),
+                unitPrice: new Prisma.Decimal(l.unitPrice),
+                taxRate: new Prisma.Decimal(18),
+                lineSubtotal: new Prisma.Decimal(l.subtotal),
+                lineTax: new Prisma.Decimal(l.tax),
+                lineTotal: new Prisma.Decimal(l.total),
+              })),
+            },
+          },
+          include: { vendor: true, lines: { include: { product: true } }, bills: true },
+        });
+        const mapped = mapPrismaPurchaseOrderToRecord(created);
+        memoryPurchaseOrders.set(created.id, mapped);
+        return mapped;
+      } catch (err) {
+        logger.warn('Failed to persist purchase order to Prisma, falling back to memory', err);
+      }
+    }
+
     const newOrder: PurchaseOrderRecord = {
       id,
       orderNumber,
@@ -169,6 +272,22 @@ export class PurchaseService {
     if (order.status === 'CANCELLED') {
       throw new BadRequestError('Cannot confirm a cancelled purchase order');
     }
+
+    if (isDatabaseAvailable()) {
+      try {
+        const updated = await prisma.purchaseOrder.update({
+          where: { id: order.id },
+          data: { status: 'CONFIRMED' },
+          include: { vendor: true, lines: { include: { product: true } }, bills: true },
+        });
+        const mapped = mapPrismaPurchaseOrderToRecord(updated);
+        memoryPurchaseOrders.set(updated.id, mapped);
+        return mapped;
+      } catch {
+        // fallback
+      }
+    }
+
     order.status = 'CONFIRMED';
     memoryPurchaseOrders.set(id, order);
     return order;
@@ -195,6 +314,21 @@ export class PurchaseService {
         unitPrice: l.unitPrice,
       })),
     });
+
+    if (isDatabaseAvailable()) {
+      try {
+        const updated = await prisma.purchaseOrder.update({
+          where: { id: order.id },
+          data: { status: 'BILLED' },
+          include: { vendor: true, lines: { include: { product: true } }, bills: true },
+        });
+        const mapped = mapPrismaPurchaseOrderToRecord(updated);
+        memoryPurchaseOrders.set(updated.id, mapped);
+        return { order: mapped, bill };
+      } catch {
+        // fallback
+      }
+    }
 
     order.status = 'BILLED';
     order.billId = bill.id;
