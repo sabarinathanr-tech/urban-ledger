@@ -28,7 +28,7 @@ export interface BillRecord {
   purchaseOrderId?: string;
   billDate: string;
   dueDate: string;
-  status: 'DRAFT' | 'POSTED' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+  status: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
   lines: BillLineRecord[];
   subtotal: number;
   taxTotal: number;
@@ -87,13 +87,15 @@ memoryBills.set(seedBill.id, seedBill);
 let billCounter = 20;
 
 function mapPrismaBillToRecord(b: any): BillRecord {
-  let displayStatus: 'DRAFT' | 'POSTED' | 'PAID' | 'OVERDUE' | 'CANCELLED' = 'POSTED';
+  let displayStatus: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED' = 'POSTED';
   if (b.status === 'DRAFT') {
     displayStatus = 'DRAFT';
   } else if (b.status === 'CANCELLED') {
     displayStatus = 'CANCELLED';
   } else if (b.paymentStatus === 'PAID' || Number(b.outstandingAmount) <= 0.01) {
     displayStatus = 'PAID';
+  } else if (b.paymentStatus === 'PARTIALLY_PAID' || (Number(b.paidAmount) > 0 && Number(b.outstandingAmount) > 0.01)) {
+    displayStatus = 'PARTIALLY_PAID';
   } else if (new Date() > new Date(b.dueDate)) {
     displayStatus = 'OVERDUE';
   } else {
@@ -407,6 +409,13 @@ export class BillService {
         });
 
         if (bill) {
+          if (bill.status === 'CANCELLED') {
+            throw new BadRequestError('Cannot process payment against a cancelled vendor bill');
+          }
+          if (bill.status === 'DRAFT') {
+            throw new BadRequestError('Cannot process payment against a draft vendor bill. Please post the bill first.');
+          }
+
           const balanceDue = Number(bill.outstandingAmount);
           if (amount > balanceDue + 0.01) {
             throw new BadRequestError(
@@ -440,6 +449,13 @@ export class BillService {
 
     const bill = memoryBills.get(billId);
     if (!bill) throw new NotFoundError('Vendor bill not found');
+
+    if (bill.status === 'CANCELLED') {
+      throw new BadRequestError('Cannot process payment against a cancelled vendor bill');
+    }
+    if (bill.status === 'DRAFT') {
+      throw new BadRequestError('Cannot process payment against a draft vendor bill. Please post the bill first.');
+    }
 
     if (amount > bill.balanceDue + 0.01) {
       throw new BadRequestError(

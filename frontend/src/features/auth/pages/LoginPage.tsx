@@ -161,17 +161,6 @@ export const LoginPage: React.FC = () => {
         >
           Create an account
         </Link>
-
-        {/* Internal Provisioning Link */}
-        <div className="text-center pt-1">
-          <Link
-            to="/create-user"
-            className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-brand-700 dark:text-slate-400 dark:hover:text-brand-300 transition-colors"
-          >
-            <span>Internal administrator?</span>
-            <span className="underline font-medium">Provision internal user</span>
-          </Link>
-        </div>
       </div>
 
       <AuthFooter />

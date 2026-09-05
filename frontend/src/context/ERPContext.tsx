@@ -1035,7 +1035,8 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       method: 'HDFC Bank Transfer' | 'Cash Register' | 'UPI'
     ): PaymentItem | null => {
       const inv = invoices.find((i) => i.id === invoiceId);
-      if (!inv || amount <= 0) return null;
+      if (!inv || amount <= 0 || inv.status === 'CANCELLED') return null;
+      if (amount > inv.balanceDue + 0.01) return null;
 
       const today = new Date().toISOString().split('T')[0];
       const payId = `pay-${Date.now()}`;
@@ -1159,7 +1160,8 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       method: 'HDFC Bank Transfer' | 'Cash Register' | 'UPI'
     ): PaymentItem | null => {
       const b = bills.find((item) => item.id === billId);
-      if (!b || amount <= 0) return null;
+      if (!b || amount <= 0 || b.status === 'CANCELLED') return null;
+      if (amount > b.balanceDue + 0.01) return null;
 
       const today = new Date().toISOString().split('T')[0];
       const payId = `pay-${Date.now()}`;

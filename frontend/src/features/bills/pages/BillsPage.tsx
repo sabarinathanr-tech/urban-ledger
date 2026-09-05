@@ -77,13 +77,21 @@ export function BillsPage() {
     }
   }, [id, bills]);
 
-  // If Contact portal, filter to vendor's own bills
+  // If Contact portal, filter strictly to vendor's own bills
+  const isVendorContact = isContact && (user?.contactType === 'VENDOR' || user?.contactType === 'BOTH');
+  const userContactId = (user as any)?.contact?.id || (user as any)?.contactId;
+  const userEmail = user?.email?.toLowerCase();
+  const userName = (user?.fullName || (user as any)?.name || '').trim().toLowerCase();
+
   const relevantBills = isContact
-    ? bills.filter(
-        (b) =>
-          b.vendorId === 'cnt-2' ||
-          b.vendorName.toLowerCase().includes(user?.fullName?.toLowerCase() || '')
-      )
+    ? isVendorContact
+      ? bills.filter((b) => {
+          if (userContactId && b.vendorId === userContactId) return true;
+          if (userEmail && (b as any).vendorEmail?.toLowerCase() === userEmail) return true;
+          if (userName && userName.length > 2 && b.vendorName.toLowerCase().includes(userName)) return true;
+          return false;
+        })
+      : [] // Customer contacts see 0 vendor bills
     : bills;
 
   const filteredBills = relevantBills.filter((b) => {

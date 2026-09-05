@@ -11,7 +11,12 @@ const router = Router();
 // All contacts endpoints require authentication
 router.use(requireAuth);
 
-router.get('/', validateQuery(listContactsQuerySchema), (req, res, next) => contactController.list(req, res, next));
+router.get(
+  '/',
+  requireRole(ROLES.ADMIN, ROLES.ACCOUNTANT),
+  validateQuery(listContactsQuerySchema),
+  (req, res, next) => contactController.list(req, res, next)
+);
 router.get('/:id', (req, res, next) => contactController.getById(req, res, next));
 
 // Contact mutations require ADMIN or ACCOUNTANT

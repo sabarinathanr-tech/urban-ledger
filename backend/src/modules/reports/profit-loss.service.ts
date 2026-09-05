@@ -55,19 +55,19 @@ export class ProfitLossService {
     return {
       period: 'FY 2026-2027 (Year to Date)',
       revenue: {
-        items: revenueItems.length > 0 ? revenueItems : [{ name: 'Sales Income', amount: 105932.2 }],
-        total: totalRevenue > 0 ? totalRevenue : 105932.2,
+        items: revenueItems,
+        total: Number(totalRevenue.toFixed(2)),
       },
       cogs: {
-        items: cogsItems.length > 0 ? cogsItems : [{ name: 'Purchases & Direct Timber Materials', amount: 51500 }],
-        total: totalCogs > 0 ? totalCogs : 51500,
+        items: cogsItems,
+        total: Number(totalCogs.toFixed(2)),
       },
-      grossProfit: grossProfit !== 0 ? grossProfit : 54432.2,
+      grossProfit: Number(grossProfit.toFixed(2)),
       operatingExpenses: {
-        items: expItems.length > 0 ? expItems : [{ name: 'Administrative & Workshop Utilities', amount: 12000 }],
-        total: totalOperatingExpenses > 0 ? totalOperatingExpenses : 12000,
+        items: expItems,
+        total: Number(totalOperatingExpenses.toFixed(2)),
       },
-      netProfit: netProfit !== 0 ? netProfit : 42432.2,
+      netProfit: Number(netProfit.toFixed(2)),
     };
   }
 }

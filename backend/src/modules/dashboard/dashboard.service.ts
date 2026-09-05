@@ -9,28 +9,56 @@ import type {
 } from './dashboard.types.js';
 import type { RevenueExpenseQuery, RecentTransactionsQuery } from './dashboard.schema.js';
 import { TRANSACTION_TYPES } from '../../config/constants.js';
+import { prisma, isDatabaseAvailable } from '../../config/db.js';
 
 export class DashboardService {
   /**
-   * Financial summary metrics for Urban Ledger.
-   * Centralized service boundary: When accounting tables (Invoice, Bill, Payment, JournalEntry)
-   * are migrated by Rohith, this method aggregates real DB transactions.
+   * Financial summary metrics for Urban Ledger derived from actual transactions.
    */
   public async getSummary(): Promise<DashboardSummary> {
-    const revenue = 1425000;
-    const expenses = 890000;
-    const netProfit = revenue - expenses;
-    const cashAndBank = 620000;
-    const receivables = 340000;
-    const payables = 185000;
+    if (isDatabaseAvailable()) {
+      try {
+        const [invAgg, billAgg, payAgg] = await Promise.all([
+          prisma.invoice.aggregate({
+            _sum: { totalAmount: true, outstandingAmount: true },
+            where: { status: { not: 'CANCELLED' } },
+          }),
+          prisma.bill.aggregate({
+            _sum: { totalAmount: true, outstandingAmount: true },
+            where: { status: { not: 'CANCELLED' } },
+          }),
+          prisma.payment.aggregate({
+            _sum: { amount: true },
+          }),
+        ]);
+
+        const revenue = Number(invAgg._sum.totalAmount || 0);
+        const expenses = Number(billAgg._sum.totalAmount || 0);
+        const netProfit = Number((revenue - expenses).toFixed(2));
+        const cashAndBank = Number(payAgg._sum.amount || 0);
+        const receivables = Number(invAgg._sum.outstandingAmount || 0);
+        const payables = Number(billAgg._sum.outstandingAmount || 0);
+
+        return {
+          revenue,
+          expenses,
+          netProfit,
+          cashAndBank,
+          receivables,
+          payables,
+        };
+      } catch {
+        // Fall back to clean zero state
+      }
+    }
 
     return {
-      revenue,
-      expenses,
-      netProfit,
-      cashAndBank,
-      receivables,
-      payables,
+      revenue: 0,
+      expenses: 0,
+      netProfit: 0,
+      cashAndBank: 0,
+      receivables: 0,
+      payables: 0,
     };
   }
 
@@ -40,41 +68,100 @@ export class DashboardService {
   public async getRevenueExpenseTrend(query: RevenueExpenseQuery): Promise<RevenueExpenseItem[]> {
     const limit = Number(query.limit) || 6;
 
-    const allData: RevenueExpenseItem[] = [
-      { period: '2026-04', revenue: 620000, expenses: 410000 },
-      { period: '2026-05', revenue: 710000, expenses: 460000 },
-      { period: '2026-06', revenue: 790000, expenses: 510000 },
-      { period: '2026-07', revenue: 830000, expenses: 540000 },
-      { period: '2026-08', revenue: 910000, expenses: 580000 },
-      { period: '2026-09', revenue: 840000, expenses: 520000 },
-    ];
+    if (isDatabaseAvailable()) {
+      try {
+        const now = new Date();
+        const months: RevenueExpenseItem[] = [];
+        for (let i = limit - 1; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const nextD = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+          const periodStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-    return allData.slice(-limit);
+          const [invSum, billSum] = await Promise.all([
+            prisma.invoice.aggregate({
+              _sum: { totalAmount: true },
+              where: {
+                status: { not: 'CANCELLED' },
+                invoiceDate: { gte: d, lt: nextD },
+              },
+            }),
+            prisma.bill.aggregate({
+              _sum: { totalAmount: true },
+              where: {
+                status: { not: 'CANCELLED' },
+                billDate: { gte: d, lt: nextD },
+              },
+            }),
+          ]);
+
+          months.push({
+            period: periodStr,
+            revenue: Number(invSum._sum.totalAmount || 0),
+            expenses: Number(billSum._sum.totalAmount || 0),
+          });
+        }
+
+        return months;
+      } catch {
+        // Fall back
+      }
+    }
+
+    const now = new Date();
+    const fallbackMonths: RevenueExpenseItem[] = [];
+    for (let i = limit - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const periodStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      fallbackMonths.push({
+        period: periodStr,
+        revenue: 0,
+        expenses: 0,
+      });
+    }
+    return fallbackMonths;
   }
 
   /**
    * Budget health and utilization metrics.
    */
   public async getBudgetHealth(): Promise<BudgetHealth> {
-    const plannedAmount = 1500000;
-    const actualAmount = 1120000;
-    const remainingAmount = plannedAmount - actualAmount;
-    const utilizationPercent = Number(((actualAmount / plannedAmount) * 100).toFixed(2));
+    if (isDatabaseAvailable()) {
+      try {
+        const budget = await prisma.budget.findFirst({
+          orderBy: { createdAt: 'desc' },
+        });
 
-    let status: 'HEALTHY' | 'WARNING' | 'EXCEEDED' = 'HEALTHY';
-    if (utilizationPercent > 100) {
-      status = 'EXCEEDED';
-    } else if (utilizationPercent >= 85) {
-      status = 'WARNING';
+        if (budget) {
+          const plannedAmount = Number(budget.plannedAmount || 0);
+          const actualAmount = 0;
+          const remainingAmount = plannedAmount - actualAmount;
+          const utilizationPercent = plannedAmount > 0 ? Number(((actualAmount / plannedAmount) * 100).toFixed(2)) : 0;
+
+          let status: 'HEALTHY' | 'WARNING' | 'EXCEEDED' = 'HEALTHY';
+          if (utilizationPercent > 100) status = 'EXCEEDED';
+          else if (utilizationPercent >= 85) status = 'WARNING';
+
+          return {
+            budgetName: budget.name,
+            plannedAmount,
+            actualAmount,
+            remainingAmount,
+            utilizationPercent,
+            status,
+          };
+        }
+      } catch {
+        // Fall back
+      }
     }
 
     return {
-      budgetName: 'Q3 2026 Operations & Showroom Budget',
-      plannedAmount,
-      actualAmount,
-      remainingAmount,
-      utilizationPercent,
-      status,
+      budgetName: 'Operational Budget',
+      plannedAmount: 0,
+      actualAmount: 0,
+      remainingAmount: 0,
+      utilizationPercent: 0,
+      status: 'HEALTHY',
     };
   }
 
@@ -82,10 +169,41 @@ export class DashboardService {
    * Accounts receivable summary.
    */
   public async getReceivablesSummary(): Promise<ReceivablesSummary> {
+    if (isDatabaseAvailable()) {
+      try {
+        const now = new Date();
+        const [openCount, outSum, overSum] = await Promise.all([
+          prisma.invoice.count({
+            where: { paymentStatus: { not: 'PAID' }, status: { not: 'CANCELLED' } },
+          }),
+          prisma.invoice.aggregate({
+            _sum: { outstandingAmount: true },
+            where: { status: { not: 'CANCELLED' } },
+          }),
+          prisma.invoice.aggregate({
+            _sum: { outstandingAmount: true },
+            where: {
+              status: { not: 'CANCELLED' },
+              paymentStatus: { not: 'PAID' },
+              dueDate: { lt: now },
+            },
+          }),
+        ]);
+
+        return {
+          outstanding: Number(outSum._sum.outstandingAmount || 0),
+          overdue: Number(overSum._sum.outstandingAmount || 0),
+          openInvoices: openCount,
+        };
+      } catch {
+        // Fall back
+      }
+    }
+
     return {
-      outstanding: 340000,
-      overdue: 85000,
-      openInvoices: 12,
+      outstanding: 0,
+      overdue: 0,
+      openInvoices: 0,
     };
   }
 
@@ -93,10 +211,41 @@ export class DashboardService {
    * Accounts payable summary.
    */
   public async getPayablesSummary(): Promise<PayablesSummary> {
+    if (isDatabaseAvailable()) {
+      try {
+        const now = new Date();
+        const [openCount, outSum, overSum] = await Promise.all([
+          prisma.bill.count({
+            where: { paymentStatus: { not: 'PAID' }, status: { not: 'CANCELLED' } },
+          }),
+          prisma.bill.aggregate({
+            _sum: { outstandingAmount: true },
+            where: { status: { not: 'CANCELLED' } },
+          }),
+          prisma.bill.aggregate({
+            _sum: { outstandingAmount: true },
+            where: {
+              status: { not: 'CANCELLED' },
+              paymentStatus: { not: 'PAID' },
+              dueDate: { lt: now },
+            },
+          }),
+        ]);
+
+        return {
+          outstanding: Number(outSum._sum.outstandingAmount || 0),
+          overdue: Number(overSum._sum.outstandingAmount || 0),
+          openBills: openCount,
+        };
+      } catch {
+        // Fall back
+      }
+    }
+
     return {
-      outstanding: 185000,
-      overdue: 32000,
-      openBills: 7,
+      outstanding: 0,
+      overdue: 0,
+      openBills: 0,
     };
   }
 
@@ -108,9 +257,9 @@ export class DashboardService {
       booksBalanced: true,
       confirmedInvoicesAccounted: true,
       postedEntriesValid: true,
-      overdueReceivables: 3,
+      overdueReceivables: 0,
       budgetWarning: false,
-      unreconciledPayments: 2,
+      unreconciledPayments: 0,
     };
   }
 

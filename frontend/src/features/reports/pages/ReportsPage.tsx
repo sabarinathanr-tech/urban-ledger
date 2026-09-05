@@ -67,13 +67,15 @@ export function ReportsPage() {
   const revenueAccounts = accounts.filter((a) => a.type === 'INCOME');
   const totalRevenue = revenueAccounts.reduce((sum, a) => sum + a.balance, 0);
 
-  const cogsAccounts = accounts.filter((a) => a.id === 'acc-5001');
+  const cogsAccounts = accounts.filter(
+    (a) => a.id === 'acc-5001' || a.code.startsWith('5')
+  );
   const totalCogs = cogsAccounts.reduce((sum, a) => sum + a.balance, 0);
 
   const grossProfit = totalRevenue - totalCogs;
 
   const operatingExpenseAccounts = accounts.filter(
-    (a) => a.type === 'EXPENSE' && a.id !== 'acc-5001'
+    (a) => a.type === 'EXPENSE' && a.id !== 'acc-5001' && !a.code.startsWith('5')
   );
   const totalOperatingExpenses = operatingExpenseAccounts.reduce((sum, a) => sum + a.balance, 0);
 
@@ -88,11 +90,11 @@ export function ReportsPage() {
   const liabilityAccounts = accounts.filter((a) => a.type === 'LIABILITY');
   const totalLiabilities = liabilityAccounts.reduce((sum, a) => sum + a.balance, 0);
 
-  const capitalAccount = accounts.find((a) => a.id === 'acc-3001');
+  const capitalAccount = accounts.find((a) => a.id === 'acc-3001' || a.type === 'EQUITY');
   const retainedEarningsAccount = accounts.find((a) => a.id === 'acc-3002');
 
-  const capitalBalance = capitalAccount ? capitalAccount.balance : 400000;
-  const retainedEarningsBalance = retainedEarningsAccount ? retainedEarningsAccount.balance : 44310;
+  const capitalBalance = capitalAccount ? capitalAccount.balance : 0;
+  const retainedEarningsBalance = retainedEarningsAccount ? retainedEarningsAccount.balance : 0;
 
   // Total Equity = Capital + Retained Earnings + Current Period Net Profit
   // By accounting identity: Assets = Liabilities + Equity + Net Profit

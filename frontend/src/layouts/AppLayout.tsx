@@ -63,6 +63,9 @@ export function AppLayout() {
   const { user, logout, isContact, isAdmin } = useAuth();
   const { ledgerEquality, resetDemoData } = useERP();
 
+  const isCustomerContact = isContact && (user?.contactType === 'CUSTOMER' || user?.contactType === 'BOTH' || !user?.contactType);
+  const isVendorContact = isContact && (user?.contactType === 'VENDOR' || user?.contactType === 'BOTH');
+
   const handleLogout = () => {
     logout();
     navigate(ROUTES.LOGIN, { replace: true });
@@ -342,35 +345,39 @@ export function AppLayout() {
               Dashboard
             </NavLink>
 
-            {/* Contact Portal Direct Tabs (Restricted) */}
+            {/* Contact Portal Direct Tabs (Strictly Role & Type Scoped) */}
             {isContact && (
               <>
-                <NavLink
-                  to={ROUTES.INVOICES}
-                  className={({ isActive }) =>
-                    cn(
-                      'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                      isActive
-                        ? 'bg-black/20 text-white font-semibold shadow-xs'
-                        : 'text-purple-100 hover:text-white hover:bg-white/15'
-                    )
-                  }
-                >
-                  My Invoices
-                </NavLink>
-                <NavLink
-                  to={ROUTES.BILLS}
-                  className={({ isActive }) =>
-                    cn(
-                      'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                      isActive
-                        ? 'bg-black/20 text-white font-semibold shadow-xs'
-                        : 'text-purple-100 hover:text-white hover:bg-white/15'
-                    )
-                  }
-                >
-                  My Bills
-                </NavLink>
+                {isCustomerContact && (
+                  <NavLink
+                    to={ROUTES.INVOICES}
+                    className={({ isActive }) =>
+                      cn(
+                        'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                        isActive
+                          ? 'bg-black/20 text-white font-semibold shadow-xs'
+                          : 'text-purple-100 hover:text-white hover:bg-white/15'
+                      )
+                    }
+                  >
+                    My Invoices
+                  </NavLink>
+                )}
+                {isVendorContact && (
+                  <NavLink
+                    to={ROUTES.BILLS}
+                    className={({ isActive }) =>
+                      cn(
+                        'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                        isActive
+                          ? 'bg-black/20 text-white font-semibold shadow-xs'
+                          : 'text-purple-100 hover:text-white hover:bg-white/15'
+                      )
+                    }
+                  >
+                    My Bills
+                  </NavLink>
+                )}
                 <NavLink
                   to={ROUTES.PAYMENTS}
                   className={({ isActive }) =>
@@ -616,20 +623,24 @@ export function AppLayout() {
 
             {isContact ? (
               <>
-                <NavLink
-                  to={ROUTES.INVOICES}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block px-3 py-2 rounded-md text-sm text-purple-100 hover:text-white hover:bg-white/10"
-                >
-                  My Invoices
-                </NavLink>
-                <NavLink
-                  to={ROUTES.BILLS}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block px-3 py-2 rounded-md text-sm text-purple-100 hover:text-white hover:bg-white/10"
-                >
-                  My Bills
-                </NavLink>
+                {isCustomerContact && (
+                  <NavLink
+                    to={ROUTES.INVOICES}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-sm text-purple-100 hover:text-white hover:bg-white/10"
+                  >
+                    My Invoices
+                  </NavLink>
+                )}
+                {isVendorContact && (
+                  <NavLink
+                    to={ROUTES.BILLS}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-sm text-purple-100 hover:text-white hover:bg-white/10"
+                  >
+                    My Bills
+                  </NavLink>
+                )}
                 <NavLink
                   to={ROUTES.PAYMENTS}
                   onClick={() => setMobileMenuOpen(false)}

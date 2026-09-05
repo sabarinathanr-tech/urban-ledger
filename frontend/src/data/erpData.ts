@@ -92,7 +92,7 @@ export interface Invoice {
   customerName: string;
   issueDate: string;
   dueDate: string;
-  status: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE';
+  status: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
   lines: LineItem[];
   subtotal: number;
   taxTotal: number;
@@ -109,7 +109,7 @@ export interface Bill {
   vendorName: string;
   billDate: string;
   dueDate: string;
-  status: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE';
+  status: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
   lines: LineItem[];
   subtotal: number;
   taxTotal: number;

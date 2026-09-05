@@ -104,6 +104,7 @@ export function AppRoutes() {
         <Route path={ROUTES.ACCOUNTING_JOURNALS} element={<AccountingPage />} />
         <Route path={ROUTES.ACCOUNTING_ENTRIES} element={<AccountingPage />} />
         <Route path={ROUTES.ACCOUNTING_LEDGER} element={<AccountingPage />} />
+        <Route path={ROUTES.ACCOUNTING_ONE_TRUTH} element={<AccountingPage />} />
 
         {/* Budgets */}
         <Route path={ROUTES.BUDGETS} element={<BudgetsPage />} />

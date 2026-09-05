@@ -78,13 +78,21 @@ export function InvoicesPage() {
     }
   }, [id, invoices]);
 
-  // If Contact portal, filter to customer's own invoices
+  // If Contact portal, filter strictly to customer's own invoices
+  const isCustomerContact = isContact && (user?.contactType === 'CUSTOMER' || user?.contactType === 'BOTH' || !user?.contactType);
+  const userContactId = (user as any)?.contact?.id || (user as any)?.contactId;
+  const userEmail = user?.email?.toLowerCase();
+  const userName = (user?.fullName || (user as any)?.name || '').trim().toLowerCase();
+
   const relevantInvoices = isContact
-    ? invoices.filter(
-        (inv) =>
-          inv.customerId === 'cnt-1' ||
-          inv.customerName.toLowerCase().includes(user?.fullName?.toLowerCase() || '')
-      )
+    ? isCustomerContact
+      ? invoices.filter((inv) => {
+          if (userContactId && inv.customerId === userContactId) return true;
+          if (userEmail && (inv as any).customerEmail?.toLowerCase() === userEmail) return true;
+          if (userName && userName.length > 2 && inv.customerName.toLowerCase().includes(userName)) return true;
+          return false;
+        })
+      : [] // Vendor contacts see 0 customer invoices
     : invoices;
 
   const filteredInvoices = relevantInvoices.filter((inv) => {

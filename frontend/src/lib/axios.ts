@@ -20,13 +20,20 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Format API errors
+// Format API errors & handle session expiration
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      console.warn('API returned 401 Unauthorized.');
+      localStorage.removeItem('urban_ledger_token');
+      localStorage.removeItem('urban_ledger_user');
+      if (
+        typeof window !== 'undefined' &&
+        window.location.pathname !== '/login' &&
+        window.location.pathname !== '/signup'
+      ) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

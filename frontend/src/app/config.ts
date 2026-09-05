@@ -47,6 +47,7 @@ export const ROUTES = {
   ACCOUNTING_JOURNALS: '/accounting/journals',
   ACCOUNTING_ENTRIES: '/accounting/journal-entries',
   ACCOUNTING_LEDGER: '/accounting/ledger',
+  ACCOUNTING_ONE_TRUTH: '/accounting/one-truth',
   JOURNAL_ENTRIES: '/accounting/journal-entries',
   CHART_OF_ACCOUNTS: '/accounting/chart-of-accounts',
 

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { contactService } from './contact.service.js';
 import { sendSuccess } from '../../utils/response.js';
+import { ForbiddenError } from '../../utils/errors.js';
 import type { CreateContactInput, UpdateContactInput, ListContactsQuery } from './contact.schema.js';
 
 export class ContactController {
@@ -16,6 +17,14 @@ export class ContactController {
   public async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const contact = await contactService.getContactById(req.params.id as string);
+      if (req.user?.role === 'CONTACT') {
+        const matchesUser =
+          contact.id === req.user.userId ||
+          (contact.email && contact.email.toLowerCase() === req.user.email.toLowerCase());
+        if (!matchesUser) {
+          throw new ForbiddenError('You are only authorized to access your own contact record');
+        }
+      }
       sendSuccess(res, 'Contact retrieved successfully', contact);
     } catch (err) {
       next(err);

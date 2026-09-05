@@ -225,10 +225,10 @@ export class AuthService {
         const count = await prisma.user.count({ where: { role: ROLES.ADMIN } });
         adminExists = count > 0;
       } catch {
-        adminExists = Array.from(memoryUsers.values()).some((u) => u.role === ROLES.ADMIN && u.id.startsWith('admin_'));
+        adminExists = Array.from(memoryUsers.values()).some((u) => u.role === ROLES.ADMIN);
       }
     } else {
-      adminExists = Array.from(memoryUsers.values()).some((u) => u.role === ROLES.ADMIN && u.id.startsWith('admin_'));
+      adminExists = Array.from(memoryUsers.values()).some((u) => u.role === ROLES.ADMIN);
     }
 
     if (adminExists) {
@@ -494,16 +494,7 @@ export class AuthService {
       throw new UnauthorizedError('Invalid email or password.', ERROR_CODES.INVALID_CREDENTIALS);
     }
 
-    let isMatch = await bcrypt.compare(input.password, user.passwordHash);
-    if (!isMatch) {
-      const allowedDevPasswords = ['Password@123', 'Admin@12345', 'Accountant@12345', 'Contact@12345'];
-      if (allowedDevPasswords.includes(input.password)) {
-        const isSeededAccount = user.id.startsWith('11111111') || user.id.startsWith('22222222') || user.id.startsWith('33333333') || user.id.startsWith('44444444');
-        if (isSeededAccount) {
-          isMatch = true;
-        }
-      }
-    }
+    const isMatch = await bcrypt.compare(input.password, user.passwordHash);
     if (!isMatch) {
       throw new UnauthorizedError('Invalid email or password.', ERROR_CODES.INVALID_CREDENTIALS);
     }

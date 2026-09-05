@@ -28,6 +28,15 @@ type DashboardState =
   | { status: 'success'; data: DashboardData };
 
 export function DashboardPage() {
+  const {
+    getDashboardMetricsData,
+    invoices,
+    bills,
+    payments,
+    salesOrders,
+    budgets,
+  } = useERP();
+
   const [state, setState] = useState<DashboardState>({ status: 'loading' });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -87,14 +96,6 @@ export function DashboardPage() {
   }
 
   const { data } = state;
-  const {
-    getDashboardMetricsData,
-    invoices,
-    bills,
-    payments,
-    salesOrders,
-    budgets,
-  } = useERP();
 
   const liveMetrics = getDashboardMetricsData();
 
@@ -180,7 +181,7 @@ export function DashboardPage() {
   }));
 
   // Empty state check — no transactions and all metrics zero
-  const hasTransactions = liveRecentTxns.length > 0 || data.recentTransactions.length > 0;
+  const hasTransactions = liveRecentTxns.length > 0;
   const hasNonZeroMetric = mergedMetrics.some((m) => m.amount !== 0);
   const isEmpty = !hasTransactions && !hasNonZeroMetric;
 

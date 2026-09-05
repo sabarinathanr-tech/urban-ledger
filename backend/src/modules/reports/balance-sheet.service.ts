@@ -53,27 +53,20 @@ export class BalanceSheetService {
     return {
       asOfDate: new Date().toISOString().split('T')[0],
       assets: {
-        items: assetItems.length > 0 ? assetItems : [
-          { name: 'Bank Account (HDFC)', amount: 45000 },
-          { name: 'Accounts Receivable (Debtors)', amount: 80000 },
-          { name: 'Finished Furniture Inventory', amount: 50000 },
-        ],
-        total: totalAssets > 0 ? totalAssets : 175000,
+        items: assetItems,
+        total: Number(totalAssets.toFixed(2)),
       },
       liabilities: {
-        items: liabilityItems.length > 0 ? liabilityItems : [
-          { name: 'Accounts Payable (Creditors)', amount: 60770 },
-          { name: 'GST Output Tax', amount: 19067.8 },
-        ],
-        total: totalLiabilities > 0 ? totalLiabilities : 79837.8,
+        items: liabilityItems,
+        total: Number(totalLiabilities.toFixed(2)),
       },
       equity: {
-        items: equityItems.length > 0 ? equityItems : [{ name: 'Owner Capital', amount: 52730 }],
-        currentYearProfit: pnl.netProfit,
-        total: totalEquity > 0 ? totalEquity : 95162.2,
+        items: equityItems,
+        currentYearProfit: Number(pnl.netProfit.toFixed(2)),
+        total: Number(totalEquity.toFixed(2)),
       },
-      totalLiabilitiesAndEquity: totalLiabilitiesAndEquity > 0 ? totalLiabilitiesAndEquity : 175000,
-      isBalanced: true,
+      totalLiabilitiesAndEquity,
+      isBalanced,
     };
   }
 }

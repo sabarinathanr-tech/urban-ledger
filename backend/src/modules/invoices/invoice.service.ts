@@ -28,7 +28,7 @@ export interface InvoiceRecord {
   salesOrderId?: string;
   issueDate: string;
   dueDate: string;
-  status: 'DRAFT' | 'POSTED' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+  status: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
   lines: InvoiceLineRecord[];
   subtotal: number;
   taxTotal: number;
@@ -87,13 +87,15 @@ memoryInvoices.set(seedInvoice.id, seedInvoice);
 let invoiceCounter = 43;
 
 function mapPrismaInvoiceToRecord(inv: any): InvoiceRecord {
-  let displayStatus: 'DRAFT' | 'POSTED' | 'PAID' | 'OVERDUE' | 'CANCELLED' = 'POSTED';
+  let displayStatus: 'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED' = 'POSTED';
   if (inv.status === 'DRAFT') {
     displayStatus = 'DRAFT';
   } else if (inv.status === 'CANCELLED') {
     displayStatus = 'CANCELLED';
   } else if (inv.paymentStatus === 'PAID' || Number(inv.outstandingAmount) <= 0.01) {
     displayStatus = 'PAID';
+  } else if (inv.paymentStatus === 'PARTIALLY_PAID' || (Number(inv.paidAmount) > 0 && Number(inv.outstandingAmount) > 0.01)) {
+    displayStatus = 'PARTIALLY_PAID';
   } else if (new Date() > new Date(inv.dueDate)) {
     displayStatus = 'OVERDUE';
   } else {
@@ -409,6 +411,13 @@ export class InvoiceService {
         });
 
         if (inv) {
+          if (inv.status === 'CANCELLED') {
+            throw new BadRequestError('Cannot process payment against a cancelled invoice');
+          }
+          if (inv.status === 'DRAFT') {
+            throw new BadRequestError('Cannot process payment against a draft invoice. Please post the invoice first.');
+          }
+
           const balanceDue = Number(inv.outstandingAmount);
           if (amount > balanceDue + 0.01) {
             throw new BadRequestError(
@@ -442,6 +451,13 @@ export class InvoiceService {
 
     const inv = memoryInvoices.get(invoiceId);
     if (!inv) throw new NotFoundError('Invoice not found');
+
+    if (inv.status === 'CANCELLED') {
+      throw new BadRequestError('Cannot process payment against a cancelled invoice');
+    }
+    if (inv.status === 'DRAFT') {
+      throw new BadRequestError('Cannot process payment against a draft invoice. Please post the invoice first.');
+    }
 
     if (amount > inv.balanceDue + 0.01) {
       throw new BadRequestError(

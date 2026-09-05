@@ -51,6 +51,8 @@ export function AccountingPage() {
       setActiveTab('ENTRIES');
     } else if (path.includes('/ledger')) {
       setActiveTab('LEDGER');
+    } else if (path.includes('/one-truth') || path.includes('/flow')) {
+      setActiveTab('FLOW');
     }
   }, [location.pathname]);
 
@@ -68,6 +70,9 @@ export function AccountingPage() {
         break;
       case 'LEDGER':
         navigate(ROUTES.ACCOUNTING_LEDGER);
+        break;
+      case 'FLOW':
+        navigate(ROUTES.ACCOUNTING_ONE_TRUTH);
         break;
       default:
         navigate(ROUTES.ACCOUNTING);

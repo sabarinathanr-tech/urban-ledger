@@ -70,13 +70,16 @@ export function PaymentsPage() {
     }
   }, [id, payments]);
 
-  // If Contact portal, filter to their records
+  // If Contact portal, filter strictly to user's own payments
+  const userContactId = (user as any)?.contact?.id || (user as any)?.contactId;
+  const userName = (user?.fullName || (user as any)?.name || '').trim().toLowerCase();
+
   const relevantPayments = isContact
-    ? payments.filter(
-        (p) =>
-          p.contactId === 'cnt-1' ||
-          p.contactName.toLowerCase().includes(user?.fullName?.toLowerCase() || '')
-      )
+    ? payments.filter((p) => {
+        if (userContactId && p.contactId === userContactId) return true;
+        if (userName && userName.length > 2 && p.contactName.toLowerCase().includes(userName)) return true;
+        return false;
+      })
     : payments;
 
   const filteredPayments = relevantPayments.filter((p) => {
