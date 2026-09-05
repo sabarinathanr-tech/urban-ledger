@@ -1,0 +1,544 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  ADMIN
+  ACCOUNTANT
+  CONTACT
+}
+
+enum ContactType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+enum ProductType {
+  GOODS
+  SERVICE
+  COMBO
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EXPENSE
+  INCOME
+  CAPITAL
+}
+
+enum JournalType {
+  SALES
+  PURCHASE
+  BANK
+  CASH
+  MISCELLANEOUS
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  INVOICED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  CONFIRMED
+  BILLED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum BillStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK
+}
+
+enum PaymentRecordStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum AnalyticAccountType {
+  INCOME
+  EXPENSES
+}
+
+// ==========================================
+// 1. AUTH & USER MODEL
+// ==========================================
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  mobile       String?
+  passwordHash String
+  role         UserRole  @default(CONTACT)
+  isActive     Boolean   @default(true)
+  contactId    String?   @unique
+  contact      Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  budgets      Budget[]  @relation("ResponsibleUser")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+// ==========================================
+// 2. MASTER DATA: CONTACTS
+// ==========================================
+
+model Contact {
+  id             String          @id @default(uuid())
+  name           String
+  type           ContactType     @default(CUSTOMER)
+  email          String?
+  mobile         String?
+  city           String?
+  state          String?
+  pincode        String?
+  profileImage   String?
+  isActive       Boolean         @default(true)
+  user           User?
+  salesOrders    SalesOrder[]
+  purchaseOrders PurchaseOrder[]
+  invoices       Invoice[]
+  bills          Bill[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([type])
+  @@index([email])
+  @@index([name])
+  @@index([isActive])
+  @@map("contacts")
+}
+
+// ==========================================
+// 3. MASTER DATA: PRODUCTS
+// ==========================================
+
+model Product {
+  id                 String              @id @default(uuid())
+  name               String
+  type               ProductType         @default(GOODS)
+  salesPrice         Decimal             @db.Decimal(15, 2)
+  purchasePrice      Decimal             @db.Decimal(15, 2)
+  category           String
+  isActive           Boolean             @default(true)
+  salesOrderLines    SalesOrderLine[]
+  purchaseOrderLines PurchaseOrderLine[]
+  invoiceLines       InvoiceLine[]
+  billLines          BillLine[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@index([name])
+  @@map("products")
+}
+
+// ==========================================
+// 4. CHART OF ACCOUNTS
+// ==========================================
+
+model Account {
+  id                    String             @id @default(uuid())
+  name                  String
+  code                  String             @unique
+  type                  AccountType
+  isActive              Boolean            @default(true)
+  journalLines          JournalEntryLine[]
+  defaultDebitJournals  Journal[]          @relation("DefaultDebitAccount")
+  defaultCreditJournals Journal[]          @relation("DefaultCreditAccount")
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+  @@map("accounts")
+}
+
+// ==========================================
+// 5. JOURNALS
+// ==========================================
+
+model Journal {
+  id                     String         @id @default(uuid())
+  name                   String
+  type                   JournalType
+  defaultDebitAccountId  String?
+  defaultDebitAccount    Account?       @relation("DefaultDebitAccount", fields: [defaultDebitAccountId], references: [id])
+  defaultCreditAccountId String?
+  defaultCreditAccount   Account?       @relation("DefaultCreditAccount", fields: [defaultCreditAccountId], references: [id])
+  isActive               Boolean        @default(true)
+  entries                JournalEntry[]
+  payments               Payment[]
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+  @@map("journals")
+}
+
+// ==========================================
+// 6. JOURNAL ENTRIES & LINES (DOUBLE ENTRY)
+// ==========================================
+
+model JournalEntry {
+  id         String             @id @default(uuid())
+  journalId  String
+  journal    Journal            @relation(fields: [journalId], references: [id])
+  date       DateTime           @default(now())
+  reference  String             @unique
+  sourceType String?
+  sourceId   String?
+  status     JournalEntryStatus @default(DRAFT)
+  lines      JournalEntryLine[]
+  invoices   Invoice[]
+  bills      Bill[]
+  payments   Payment[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@index([date])
+  @@index([journalId])
+  @@index([reference])
+  @@index([status])
+  @@index([sourceType, sourceId])
+  @@map("journal_entries")
+}
+
+model JournalEntryLine {
+  id                String          @id @default(uuid())
+  journalEntryId    String
+  journalEntry      JournalEntry    @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           Account         @relation(fields: [accountId], references: [id])
+  analyticAccountId String?
+  analyticAccount   AnalyticAccount? @relation(fields: [analyticAccountId], references: [id])
+  description       String?
+  debit             Decimal         @default(0) @db.Decimal(15, 2)
+  credit            Decimal         @default(0) @db.Decimal(15, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([journalEntryId])
+  @@index([accountId])
+  @@index([analyticAccountId])
+  @@map("journal_entry_lines")
+}
+
+// ==========================================
+// 7. SALES TRANSACTIONS
+// ==========================================
+
+model SalesOrder {
+  id          String           @id @default(uuid())
+  reference   String           @unique
+  customerId  String
+  customer    Contact          @relation(fields: [customerId], references: [id])
+  orderDate   DateTime         @default(now())
+  status      SalesOrderStatus @default(DRAFT)
+  subtotal    Decimal          @db.Decimal(15, 2)
+  taxAmount   Decimal          @db.Decimal(15, 2)
+  totalAmount Decimal          @db.Decimal(15, 2)
+  lines       SalesOrderLine[]
+  invoices    Invoice[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([customerId])
+  @@index([orderDate])
+  @@index([status])
+  @@index([reference])
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id           String     @id @default(uuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+  quantity     Decimal    @db.Decimal(12, 2)
+  unitPrice    Decimal    @db.Decimal(15, 2)
+  taxRate      Decimal    @default(0) @db.Decimal(5, 2)
+  lineSubtotal Decimal    @db.Decimal(15, 2)
+  lineTax      Decimal    @db.Decimal(15, 2)
+  lineTotal    Decimal    @db.Decimal(15, 2)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([salesOrderId])
+  @@index([productId])
+  @@map("sales_order_lines")
+}
+
+// ==========================================
+// 8. PURCHASE TRANSACTIONS
+// ==========================================
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  reference   String              @unique
+  vendorId    String
+  vendor      Contact             @relation(fields: [vendorId], references: [id])
+  orderDate   DateTime            @default(now())
+  status      PurchaseOrderStatus @default(DRAFT)
+  subtotal    Decimal             @db.Decimal(15, 2)
+  taxAmount   Decimal             @db.Decimal(15, 2)
+  totalAmount Decimal             @db.Decimal(15, 2)
+  lines       PurchaseOrderLine[]
+  bills       Bill[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([vendorId])
+  @@index([orderDate])
+  @@index([status])
+  @@index([reference])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  quantity        Decimal       @db.Decimal(12, 2)
+  unitPrice       Decimal       @db.Decimal(15, 2)
+  taxRate         Decimal       @default(0) @db.Decimal(5, 2)
+  lineSubtotal    Decimal       @db.Decimal(15, 2)
+  lineTax         Decimal       @db.Decimal(15, 2)
+  lineTotal       Decimal       @db.Decimal(15, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+  @@map("purchase_order_lines")
+}
+
+// ==========================================
+// 9. CUSTOMER INVOICES
+// ==========================================
+
+model Invoice {
+  id                String        @id @default(uuid())
+  reference         String        @unique
+  customerId        String
+  customer          Contact       @relation(fields: [customerId], references: [id])
+  salesOrderId      String?
+  salesOrder        SalesOrder?   @relation(fields: [salesOrderId], references: [id])
+  journalEntryId    String?
+  journalEntry      JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  invoiceDate       DateTime      @default(now())
+  dueDate           DateTime
+  status            InvoiceStatus @default(DRAFT)
+  paymentStatus     PaymentStatus @default(UNPAID)
+  subtotal          Decimal       @db.Decimal(15, 2)
+  taxAmount         Decimal       @db.Decimal(15, 2)
+  totalAmount       Decimal       @db.Decimal(15, 2)
+  paidAmount        Decimal       @default(0) @db.Decimal(15, 2)
+  outstandingAmount Decimal       @db.Decimal(15, 2)
+  lines             InvoiceLine[]
+  payments          Payment[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([invoiceDate])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([reference])
+  @@index([journalEntryId])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id           String   @id @default(uuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  description  String?
+  quantity     Decimal  @db.Decimal(12, 2)
+  unitPrice    Decimal  @db.Decimal(15, 2)
+  taxRate      Decimal  @default(0) @db.Decimal(5, 2)
+  lineSubtotal Decimal  @db.Decimal(15, 2)
+  lineTax      Decimal  @db.Decimal(15, 2)
+  lineTotal    Decimal  @db.Decimal(15, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("invoice_lines")
+}
+
+// ==========================================
+// 10. VENDOR BILLS
+// ==========================================
+
+model Bill {
+  id                String        @id @default(uuid())
+  reference         String        @unique
+  vendorId          String
+  vendor            Contact       @relation(fields: [vendorId], references: [id])
+  purchaseOrderId   String?
+  purchaseOrder     PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  journalEntryId    String?
+  journalEntry      JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  billDate          DateTime      @default(now())
+  dueDate           DateTime
+  status            BillStatus    @default(DRAFT)
+  paymentStatus     PaymentStatus @default(UNPAID)
+  subtotal          Decimal       @db.Decimal(15, 2)
+  taxAmount         Decimal       @db.Decimal(15, 2)
+  totalAmount       Decimal       @db.Decimal(15, 2)
+  paidAmount        Decimal       @default(0) @db.Decimal(15, 2)
+  outstandingAmount Decimal       @db.Decimal(15, 2)
+  lines             BillLine[]
+  payments          Payment[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([vendorId])
+  @@index([billDate])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([reference])
+  @@index([journalEntryId])
+  @@map("bills")
+}
+
+model BillLine {
+  id           String   @id @default(uuid())
+  billId       String
+  bill         Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  description  String?
+  quantity     Decimal  @db.Decimal(12, 2)
+  unitPrice    Decimal  @db.Decimal(15, 2)
+  taxRate      Decimal  @default(0) @db.Decimal(5, 2)
+  lineSubtotal Decimal  @db.Decimal(15, 2)
+  lineTax      Decimal  @db.Decimal(15, 2)
+  lineTotal    Decimal  @db.Decimal(15, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([billId])
+  @@index([productId])
+  @@map("bill_lines")
+}
+
+// ==========================================
+// 11. PAYMENTS
+// ==========================================
+
+model Payment {
+  id             String              @id @default(uuid())
+  reference      String              @unique
+  invoiceId      String?
+  invoice        Invoice?            @relation(fields: [invoiceId], references: [id])
+  billId         String?
+  bill           Bill?               @relation(fields: [billId], references: [id])
+  paymentDate    DateTime            @default(now())
+  amount         Decimal             @db.Decimal(15, 2)
+  method         PaymentMethod
+  journalId      String
+  journal        Journal             @relation(fields: [journalId], references: [id])
+  journalEntryId String?
+  journalEntry   JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+  status         PaymentRecordStatus @default(POSTED)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([paymentDate])
+  @@index([invoiceId])
+  @@index([billId])
+  @@index([journalId])
+  @@index([journalEntryId])
+  @@index([reference])
+  @@map("payments")
+}
+
+// ==========================================
+// 12. BUDGETING & ANALYTIC ACCOUNTS
+// ==========================================
+
+model AnalyticAccount {
+  id           String              @id @default(uuid())
+  name         String
+  type         AnalyticAccountType
+  budgets      Budget[]
+  journalLines JournalEntryLine[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([type])
+  @@map("analytic_accounts")
+}
+
+model Budget {
+  id                String          @id @default(uuid())
+  name              String
+  startDate         DateTime
+  endDate           DateTime
+  plannedAmount     Decimal         @db.Decimal(15, 2)
+  responsibleUserId String
+  responsibleUser   User            @relation("ResponsibleUser", fields: [responsibleUserId], references: [id])
+  analyticAccountId String
+  analyticAccount   AnalyticAccount @relation(fields: [analyticAccountId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([analyticAccountId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([responsibleUserId])
+  @@map("budgets")
+}
