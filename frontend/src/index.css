@@ -1,0 +1,17 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  
+  body {
+    @apply bg-[#F9FAFB] text-slate-900 selection:bg-brand-100 selection:text-brand-900 antialiased;
+  }
+
+  .dark body {
+    @apply bg-[#0F1216] text-slate-100 selection:bg-brand-900 selection:text-brand-100 antialiased;
+  }
+}
