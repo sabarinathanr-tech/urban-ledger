@@ -4,6 +4,15 @@ import { sendSuccess } from '../../utils/response.js';
 import { UnauthorizedError } from '../../utils/errors.js';
 
 export class AuthController {
+  public async setupAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.setupInitialAdmin(req.body);
+      sendSuccess(res, 'Initial administrator bootstrap successful', result, 201);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public async signup(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await authService.signup(req.body);

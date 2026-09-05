@@ -1,4 +1,4 @@
-﻿export type UserRole = 'ADMIN' | 'ACCOUNTANT' | 'CONTACT';
+export type UserRole = 'ADMIN' | 'ACCOUNTANT' | 'CONTACT';
 
 export type ContactType = 'CUSTOMER' | 'VENDOR' | 'BOTH';
 
@@ -32,10 +32,18 @@ export interface CreateUserData {
 export interface AuthUser {
   id: string;
   fullName: string;
+  name?: string;
   email: string;
   role: UserRole;
   contactType?: ContactType;
   isActive?: boolean;
+  contact?: {
+    id: string;
+    name: string;
+    email?: string | null;
+    mobile?: string | null;
+    type?: string;
+  } | null;
 }
 
 export interface AuthResponse {

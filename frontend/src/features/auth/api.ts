@@ -1,86 +1,161 @@
-﻿import type {
+import apiClient from '@/lib/axios';
+import type {
   LoginCredentials,
   SignupData,
   CreateUserData,
   AuthResponse,
+  UserRole,
+  ContactType,
 } from './types';
 
-/**
- * Urban Ledger Auth API Integration Boundary
- *
- * NOTE: Actual backend authentication endpoints are not implemented yet.
- * These typed functions provide the contract boundary for the backend developer
- * to integrate with (e.g., Axios instance or fetch client).
- */
-
-const SIMULATED_LATENCY_MS = 600;
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+export interface UserRecord {
+  id: string;
+  name: string;
+  email: string;
+  mobile: string | null;
+  role: UserRole;
+  status: 'ACTIVE' | 'INACTIVE';
+  contact?: {
+    id: string;
+    name: string;
+    type: ContactType;
+    status: string;
+  } | null;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 /**
  * Sign in existing user.
- * Target Endpoint: POST /api/auth/login
+ * POST /api/auth/login
  */
 export async function loginUser(credentials: LoginCredentials): Promise<AuthResponse> {
-  await delay(SIMULATED_LATENCY_MS);
-
-  // Return API integration placeholder response
+  const res = await apiClient.post('/auth/login', credentials);
+  const data = res.data.data;
   return {
     success: true,
-    message: 'Backend API connection pending: Authentication endpoint (POST /api/auth/login) is ready for integration.',
+    message: res.data.message || 'Login successful',
+    token: data.token,
     user: {
-      id: 'usr_preview',
-      fullName: 'Demo User',
-      email: credentials.email,
-      role: 'ADMIN',
+      id: data.user.id,
+      fullName: data.user.name,
+      email: data.user.email,
+      role: data.user.role,
+      contactType: data.user.contact?.type,
+      isActive: data.user.status === 'ACTIVE',
     },
   };
 }
 
 /**
  * Register a new user account (public registration).
- * Target Endpoint: POST /api/auth/signup
+ * POST /api/auth/signup
  */
 export async function signupUser(data: SignupData): Promise<AuthResponse> {
-  await delay(SIMULATED_LATENCY_MS);
-
+  const res = await apiClient.post('/auth/signup', {
+    fullName: data.fullName,
+    email: data.email,
+    mobileNumber: data.mobileNumber,
+    password: data.password,
+    confirmPassword: data.confirmPassword,
+  });
+  const resData = res.data.data;
   return {
     success: true,
-    message: 'Backend API connection pending: Registration endpoint (POST /api/auth/signup) is ready for integration.',
+    message: res.data.message || 'Signup successful',
+    token: resData.token,
     user: {
-      id: 'usr_new',
-      fullName: data.fullName,
-      email: data.email,
-      role: 'CONTACT',
+      id: resData.user.id,
+      fullName: resData.user.name,
+      email: resData.user.email,
+      role: resData.user.role,
+      isActive: true,
     },
   };
 }
 
 /**
  * Create a new user account (internal admin action).
- * Target Endpoint: POST /api/users
+ * POST /api/users
  */
 export async function createUser(data: CreateUserData): Promise<AuthResponse> {
-  await delay(SIMULATED_LATENCY_MS);
-
+  const res = await apiClient.post('/users', {
+    name: data.fullName,
+    email: data.email,
+    mobile: data.mobileNumber,
+    role: data.role,
+    contactType: data.contactType,
+    password: data.tempPassword,
+    isActive: data.isActive,
+  });
+  const resData = res.data.data;
   return {
     success: true,
-    message: `Backend API connection pending: User creation endpoint (POST /api/users) ready. Role: ${data.role}${data.contactType ? ` (${data.contactType})` : ''}.`,
+    message: res.data.message || 'User created successfully',
     user: {
-      id: 'usr_created',
-      fullName: data.fullName,
-      email: data.email,
-      role: data.role,
-      contactType: data.contactType,
-      isActive: data.isActive,
+      id: resData.user.id,
+      fullName: resData.user.name,
+      email: resData.user.email,
+      role: resData.user.role,
+      contactType: resData.user.contact?.type,
+      isActive: resData.user.status === 'ACTIVE',
+    },
+  };
+}
+
+/**
+ * List users (Admin only)
+ * GET /api/users
+ */
+export async function listUsers(query?: { page?: number; limit?: number; search?: string; role?: string }): Promise<{ items: UserRecord[]; total: number }> {
+  const res = await apiClient.get('/users', { params: query });
+  return res.data.data;
+}
+
+/**
+ * Toggle user active/inactive status (Admin only)
+ * PATCH /api/users/:id/status
+ */
+export async function toggleUserStatus(id: string): Promise<UserRecord> {
+  const res = await apiClient.patch(`/users/${id}/status`);
+  return res.data.data.user;
+}
+
+/**
+ * Initialize First Administrator (One-time bootstrap endpoint)
+ * POST /api/auth/setup-admin
+ */
+export async function setupInitialAdmin(data: SignupData): Promise<AuthResponse> {
+  const res = await apiClient.post('/auth/setup-admin', {
+    fullName: data.fullName,
+    email: data.email,
+    mobileNumber: data.mobileNumber,
+    password: data.password,
+    confirmPassword: data.confirmPassword,
+  });
+  const resData = res.data.data;
+  return {
+    success: true,
+    message: res.data.message || 'First administrator created successfully',
+    token: resData.token,
+    user: {
+      id: resData.user.id,
+      fullName: resData.user.name,
+      email: resData.user.email,
+      role: 'ADMIN',
+      isActive: true,
     },
   };
 }
 
 /**
  * Log out the current user session.
- * Target Endpoint: POST /api/auth/logout
+ * POST /api/auth/logout
  */
 export async function logoutUser(): Promise<void> {
-  await delay(SIMULATED_LATENCY_MS);
+  try {
+    await apiClient.post('/auth/logout');
+  } catch {
+    // Ignore network error on logout
+  }
 }

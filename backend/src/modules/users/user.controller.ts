@@ -20,6 +20,16 @@ export class UserController {
       next(error);
     }
   }
+
+  public async toggleUserStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const currentUserId = req.user?.userId || '';
+      const updated = await userService.toggleUserStatus(String(req.params.id), currentUserId);
+      sendSuccess(res, 'User status updated successfully', { user: updated }, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const userController = new UserController();

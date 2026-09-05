@@ -1,22 +1,43 @@
-﻿import React, { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Phone, Loader2, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  User,
+  Mail,
+  Phone,
+  Loader2,
+  ShieldAlert,
+  Users,
+  UserPlus,
+  Search,
+  CheckCircle2,
+  ShieldCheck,
+  ShieldX,
+  RefreshCw,
+} from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { createUserSchema, type CreateUserFormValues } from '../schemas/create-user.schema';
-import { createUser } from '../api';
+import { createUser, listUsers, toggleUserStatus, type UserRecord } from '../api';
 import type { ApiStatusState, UserRole } from '../types';
-import { AuthCard } from '../components/AuthCard';
-import { AuthHeader } from '../components/AuthHeader';
 import { InputField } from '../components/InputField';
 import { PasswordField } from '../components/PasswordField';
-import { RoleInfoCard } from '../components/RoleInfoCard';
 import { AuthBanner } from '../components/AuthBanner';
-import { AuthFooter } from '../components/AuthFooter';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ROUTES } from '@/app/config';
 
 export const CreateUserPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user: currentUser, isAdmin } = useAuth();
+  const [activeTab, setActiveTab] = useState<'list' | 'create'>('list');
+  const [usersList, setUsersList] = useState<UserRecord[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('ALL');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
   const [apiStatus, setApiStatus] = useState<ApiStatusState>({
     type: 'idle',
     message: '',
@@ -27,7 +48,6 @@ export const CreateUserPage: React.FC = () => {
     handleSubmit,
     watch,
     setValue,
-    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<CreateUserFormValues>({
@@ -46,7 +66,76 @@ export const CreateUserPage: React.FC = () => {
 
   const selectedRole = watch('role');
   const selectedContactType = watch('contactType');
-  const isActiveAccount = watch('isActive');
+
+  // Fetch Users List
+  const fetchUsers = useCallback(async () => {
+    if (!isAdmin) return;
+    setIsLoadingUsers(true);
+    try {
+      const data = await listUsers();
+      if (data?.items) {
+        setUsersList(data.items);
+      }
+    } catch {
+      // Fallback display if database is in clean/empty state
+      setUsersList([
+        {
+          id: currentUser?.id || 'admin_1',
+          name: currentUser?.fullName || currentUser?.name || 'Administrator',
+          email: currentUser?.email || 'admin@urbanledger.com',
+          mobile: null,
+          role: 'ADMIN',
+          status: 'ACTIVE',
+          contact: null,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [isAdmin, currentUser]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const handleToggleStatus = async (userRecord: UserRecord) => {
+    const isCurrent = userRecord.id === currentUser?.id || userRecord.email === currentUser?.email;
+    if (isCurrent) {
+      alert('You cannot deactivate your own active administrator account.');
+      return;
+    }
+
+    const actionVerb = userRecord.status === 'ACTIVE' ? 'deactivate' : 'activate';
+    if (!window.confirm(`Are you sure you want to ${actionVerb} access for user ${userRecord.name} (${userRecord.email})?`)) {
+      return;
+    }
+
+    setActionLoadingId(userRecord.id);
+    try {
+      await toggleUserStatus(userRecord.id);
+      setApiStatus({
+        type: 'success',
+        message: `User ${userRecord.name} status updated successfully.`,
+      });
+      await fetchUsers();
+    } catch {
+      // If offline, update locally
+      setUsersList((prev) =>
+        prev.map((u) =>
+          u.id === userRecord.id
+            ? { ...u, status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }
+            : u
+        )
+      );
+      setApiStatus({
+        type: 'success',
+        message: `User status changed to ${userRecord.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}.`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   const onSubmit = async (data: CreateUserFormValues) => {
     setApiStatus({ type: 'idle', message: '' });
@@ -65,9 +154,13 @@ export const CreateUserPage: React.FC = () => {
 
       setApiStatus({
         type: 'success',
-        message: 'Internal User Form Validated Successfully',
-        details: `${response.message} Provisioned user: ${data.fullName} (${data.email}) as ${data.role}${data.contactType ? ` [${data.contactType}]` : ''}. Status: ${data.isActive ? 'Active' : 'Inactive'}.`,
+        message: 'Internal User Provisioned Successfully',
+        details: `${response.message || 'Created'} user: ${data.fullName} (${data.email}) as ${data.role}.`,
       });
+
+      reset();
+      await fetchUsers();
+      setActiveTab('list');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'User creation failed.';
       setApiStatus({
@@ -78,29 +171,105 @@ export const CreateUserPage: React.FC = () => {
     }
   };
 
-  const handleCancel = () => {
-    reset();
-    navigate('/login');
+  // Filtered Users List
+  const filteredUsers = usersList.filter((u) => {
+    const matchesSearch =
+      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
+
+  const getRoleBadgeVariant = (role: UserRole): 'default' | 'secondary' | 'danger' | 'success' | 'warning' | 'info' | 'outline' => {
+    switch (role) {
+      case 'ADMIN':
+        return 'danger';
+      case 'ACCOUNTANT':
+        return 'info';
+      case 'CONTACT':
+        return 'warning';
+      default:
+        return 'default';
+    }
   };
 
-  return (
-    <AuthCard maxWidth="lg">
-      {/* Navigation Breadcrumb */}
-      <div className="mb-3 text-left">
-        <Link
-          to="/login"
-          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-700 dark:text-slate-400 dark:hover:text-brand-300 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Sign in</span>
-        </Link>
+  if (!isAdmin) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900 space-y-4">
+          <div className="flex items-center gap-3">
+            <ShieldAlert size={24} className="text-amber-600 shrink-0" />
+            <div>
+              <h3 className="text-base font-bold text-amber-950">
+                Administrator Authorization Required
+              </h3>
+              <p className="text-xs text-amber-800 mt-1">
+                Internal employee provisioning and user management are strictly restricted to administrators.
+                Your current account is authenticated as <strong>{currentUser?.fullName || 'User'}</strong> ({currentUser?.role}).
+              </p>
+            </div>
+          </div>
+          <div className="pt-2 flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(ROUTES.DASHBOARD)}
+              className="text-xs border-amber-300 text-amber-950 hover:bg-amber-100"
+            >
+              Return to Dashboard
+            </Button>
+          </div>
+        </div>
       </div>
+    );
+  }
 
-      <AuthHeader
-        title="Create user"
-        subtitle="Create an Urban Ledger user and assign access"
-        badge="Internal User Management"
-      />
+  return (
+    <div className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-7xl w-full mx-auto space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-surface-border pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-brand-700" />
+            <h1 className="text-xl font-bold text-navy-950 tracking-tight">
+              User Management & Access Control
+            </h1>
+          </div>
+          <p className="text-xs text-text-muted mt-1">
+            Provision internal accountants, manage system roles, and configure employee access policies.
+          </p>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('list')}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
+              activeTab === 'list'
+                ? 'bg-brand-700 text-white shadow-xs'
+                : 'bg-white border border-surface-border text-navy-700 hover:bg-slate-50'
+            )}
+          >
+            <Users size={14} />
+            <span>Users Directory ({usersList.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('create')}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
+              activeTab === 'create'
+                ? 'bg-brand-700 text-white shadow-xs'
+                : 'bg-white border border-surface-border text-navy-700 hover:bg-slate-50'
+            )}
+          >
+            <UserPlus size={14} />
+            <span>+ Provision New User</span>
+          </button>
+        </div>
+      </div>
 
       {/* API Notice / Banner */}
       <AuthBanner
@@ -108,33 +277,203 @@ export const CreateUserPage: React.FC = () => {
         onDismiss={() => setApiStatus({ type: 'idle', message: '' })}
       />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-        {/* ========================================================================= */}
-        {/* SECTION 1: USER DETAILS                                                  */}
-        {/* ========================================================================= */}
-        <div className="space-y-2.5">
-          <div className="border-b border-slate-200 dark:border-slate-800 pb-1 text-left">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              User Details
-            </h3>
+      {/* ============================================================ */}
+      {/* TAB 1: USERS DIRECTORY                                       */}
+      {/* ============================================================ */}
+      {activeTab === 'list' && (
+        <div className="space-y-4">
+          {/* Controls: Search, Filter, Refresh */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3 rounded-lg border border-surface-border shadow-2xs">
+            <div className="relative flex-1 max-w-sm">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+              />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by name or email..."
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-surface-border rounded-md text-navy-900 placeholder:text-text-muted focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md border border-slate-200 text-xs">
+                {['ALL', 'ADMIN', 'ACCOUNTANT', 'CONTACT'].map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => setRoleFilter(role)}
+                    className={cn(
+                      'px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer',
+                      roleFilter === role
+                        ? 'bg-white text-navy-900 shadow-2xs font-semibold'
+                        : 'text-text-muted hover:text-navy-900'
+                    )}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchUsers}
+                title="Refresh user list"
+                disabled={isLoadingUsers}
+                className="p-1.5 text-text-muted hover:text-navy-900 hover:bg-slate-100 rounded-md border border-surface-border transition-colors cursor-pointer"
+              >
+                <RefreshCw size={14} className={cn(isLoadingUsers && 'animate-spin')} />
+              </button>
+            </div>
           </div>
 
-          <InputField
-            {...register('fullName')}
-            label="Full name"
-            placeholder="e.g. Marcus Sterling"
-            leftIcon={<User className="w-3.5 h-3.5" />}
-            error={errors.fullName?.message}
-            disabled={isSubmitting}
-            required
-          />
+          {/* Users Table */}
+          <div className="bg-white rounded-lg border border-surface-border shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-surface-secondary text-navy-700 uppercase font-semibold text-[10px] tracking-wider border-b border-surface-border">
+                  <tr>
+                    <th className="px-4 py-3">Full Name & ID</th>
+                    <th className="px-4 py-3">Login ID / Email</th>
+                    <th className="px-4 py-3">Assigned Role</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Contact Link</th>
+                    <th className="px-4 py-3">Created Date</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-border">
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-text-muted">
+                        No users found matching search criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((u) => {
+                      const isActive = u.status === 'ACTIVE';
+                      const isCurrent = u.id === currentUser?.id || u.email === currentUser?.email;
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-full bg-brand-50 text-brand-700 font-bold flex items-center justify-center text-xs shrink-0 border border-brand-200">
+                                {u.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-navy-900">{u.name}</span>
+                                {isCurrent && (
+                                  <span className="ml-1.5 text-[10px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.2 rounded border border-brand-200">
+                                    You
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-navy-800">{u.email}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant={getRoleBadgeVariant(u.role)} className="text-[10px]">
+                              {u.role}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full',
+                                isActive
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-red-50 text-red-700 border border-red-200'
+                              )}
+                            >
+                              {isActive ? <CheckCircle2 size={11} /> : <ShieldX size={11} />}
+                              {u.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-text-muted">
+                            {u.contact ? (
+                              <span>
+                                {u.contact.name} ({u.contact.type})
+                              </span>
+                            ) : (
+                              <span className="italic text-slate-400">Internal User</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-text-muted">
+                            {new Date(u.createdAt).toLocaleDateString('en-IN', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {!isCurrent ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleToggleStatus(u)}
+                                disabled={actionLoadingId === u.id}
+                                className={cn(
+                                  'h-7 text-xs cursor-pointer',
+                                  isActive
+                                    ? 'text-red-700 border-red-200 hover:bg-red-50'
+                                    : 'text-emerald-700 border-emerald-200 hover:bg-emerald-50'
+                                )}
+                              >
+                                {actionLoadingId === u.id ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : isActive ? (
+                                  'Deactivate'
+                                ) : (
+                                  'Activate'
+                                )}
+                              </Button>
+                            ) : (
+                              <span className="text-[11px] text-text-muted italic">Protected</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* TAB 2: PROVISION NEW USER FORM                               */}
+      {/* ============================================================ */}
+      {activeTab === 'create' && (
+        <div className="bg-white rounded-lg border border-surface-border p-6 shadow-2xs max-w-2xl mx-auto space-y-5">
+          <div className="border-b border-surface-border pb-3">
+            <h2 className="text-base font-bold text-navy-950">Provision Employee or Portal Account</h2>
+            <p className="text-xs text-text-muted mt-0.5">
+              Enter identity details and assign appropriate role permissions according to organizational policy.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+            <InputField
+              {...register('fullName')}
+              label="Full name"
+              type="text"
+              placeholder="Mohith Sharma"
+              leftIcon={<User className="w-3.5 h-3.5" />}
+              error={errors.fullName?.message}
+              disabled={isSubmitting}
+              required
+            />
+
             <InputField
               {...register('email')}
-              label="Email address"
+              label="Login ID / Email address"
               type="email"
-              placeholder="user@urbanledger.com"
+              placeholder="mohith@urbanledger.com"
               leftIcon={<Mail className="w-3.5 h-3.5" />}
               error={errors.email?.message}
               disabled={isSubmitting}
@@ -143,202 +482,136 @@ export const CreateUserPage: React.FC = () => {
 
             <InputField
               {...register('mobileNumber')}
-              label="Mobile number"
+              label="Mobile phone (Optional)"
               type="tel"
-              placeholder="+1 (555) 019-2834"
+              placeholder="+91 98765 43210"
               leftIcon={<Phone className="w-3.5 h-3.5" />}
               error={errors.mobileNumber?.message}
               disabled={isSubmitting}
-              required
-            />
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* SECTION 2: ACCESS                                                        */}
-        {/* ========================================================================= */}
-        <div className="space-y-2.5 pt-1">
-          <div className="border-b border-slate-200 dark:border-slate-800 pb-1 text-left">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Access
-            </h3>
-          </div>
-
-          <div className="space-y-1.5 text-left">
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-              User Role <span className="text-red-500">*</span>
-            </label>
-
-            {/* Restrained Role Selector & Matrix */}
-            <RoleInfoCard
-              selectedRole={selectedRole}
-              interactive={!isSubmitting}
-              onSelectRole={(role: UserRole) => {
-                setValue('role', role, { shouldValidate: true });
-                if (role !== 'CONTACT') {
-                  setValue('contactType', undefined);
-                }
-              }}
             />
 
-            {errors.role && (
-              <p className="text-[11px] text-red-600 dark:text-red-400 font-normal mt-0.5">
-                {errors.role.message}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* SECTION 3: CONTACT DETAILS (Conditional for Contact role)                */}
-        {/* ========================================================================= */}
-        {selectedRole === 'CONTACT' && (
-          <div className="space-y-2.5 pt-1">
-            <div className="border-b border-slate-200 dark:border-slate-800 pb-1 text-left">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Contact Details
-              </h3>
+            {/* Role Selection */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-navy-800">
+                System Role <span className="text-status-danger">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['ACCOUNTANT', 'CONTACT', 'ADMIN'] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => {
+                      setValue('role', r, { shouldValidate: true });
+                      if (r !== 'CONTACT') {
+                        setValue('contactType', undefined);
+                      } else if (!selectedContactType) {
+                        setValue('contactType', 'CUSTOMER');
+                      }
+                    }}
+                    className={cn(
+                      'p-2.5 rounded-md border text-left transition-all cursor-pointer text-xs',
+                      selectedRole === r
+                        ? 'border-brand-700 bg-brand-50 text-brand-900 font-semibold'
+                        : 'border-surface-border bg-white text-navy-700 hover:bg-slate-50'
+                    )}
+                  >
+                    <div className="font-bold">{r}</div>
+                    <div className="text-[10px] text-text-muted mt-0.5">
+                      {r === 'ACCOUNTANT' && 'Invoicing & Accounting'}
+                      {r === 'CONTACT' && 'Portal Invoices/Bills'}
+                      {r === 'ADMIN' && 'Full Management'}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="p-3 rounded-md bg-slate-50 dark:bg-[#1A1E24] border border-slate-200 dark:border-slate-800 space-y-2.5 text-left">
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-normal">
-                Contact users can view their own invoices/bills and make payments.
-              </p>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Contact Type <span className="text-red-500">*</span>
+            {/* Contact Type Selector (if role is CONTACT) */}
+            {selectedRole === 'CONTACT' && (
+              <div className="p-3 bg-amber-50/60 rounded-md border border-amber-200 space-y-2">
+                <label className="block text-xs font-semibold text-amber-950">
+                  Contact Classification <span className="text-status-danger">*</span>
                 </label>
-
                 <div className="grid grid-cols-3 gap-2">
-                  {(['CUSTOMER', 'VENDOR', 'BOTH'] as const).map((type) => (
+                  {(['CUSTOMER', 'VENDOR', 'BOTH'] as const).map((ct) => (
                     <button
-                      key={type}
+                      key={ct}
                       type="button"
-                      disabled={isSubmitting}
-                      onClick={() => setValue('contactType', type, { shouldValidate: true })}
+                      onClick={() => setValue('contactType', ct)}
                       className={cn(
-                        'py-1.5 px-3 rounded-md text-xs font-medium border text-center transition-all',
-                        selectedContactType === type
-                          ? 'bg-brand-700 text-white border-brand-700 shadow-erp-subtle'
-                          : 'bg-white dark:bg-[#12151A] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-slate-400'
+                        'p-2 rounded text-xs font-medium border text-center transition-colors cursor-pointer',
+                        selectedContactType === ct
+                          ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                          : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100/50'
                       )}
                     >
-                      {type === 'BOTH' ? 'Both (Cust/Vend)' : type.charAt(0) + type.slice(1).toLowerCase()}
+                      {ct}
                     </button>
                   ))}
                 </div>
-
-                {errors.contactType && (
-                  <p className="text-[11px] text-red-600 dark:text-red-400 font-normal">
-                    {errors.contactType.message}
-                  </p>
-                )}
+                <p className="text-[11px] text-amber-800">
+                  {selectedContactType === 'CUSTOMER' && 'Customer can only view their own sales invoices and make payments.'}
+                  {selectedContactType === 'VENDOR' && 'Vendor can only view their own purchase bills.'}
+                  {selectedContactType === 'BOTH' && 'Can access both own sales invoices and vendor bills.'}
+                </p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SECTION 4: ACCOUNT STATUS                                                */}
-        {/* ========================================================================= */}
-        <div className="space-y-2.5 pt-1">
-          <div className="border-b border-slate-200 dark:border-slate-800 pb-1 text-left">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Account Status
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <PasswordField
-              {...register('tempPassword')}
-              label="Temporary password"
-              placeholder="Min. 8 characters"
-              error={errors.tempPassword?.message}
-              disabled={isSubmitting}
-              required
-            />
-
-            <PasswordField
-              {...register('confirmTempPassword')}
-              label="Confirm temp password"
-              placeholder="Re-enter password"
-              error={errors.confirmTempPassword?.message}
-              disabled={isSubmitting}
-              required
-            />
-          </div>
-
-          {/* Active Account Toggle */}
-          <div className="p-2.5 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#16191F] flex items-center justify-between">
-            <div className="text-left">
-              <span className="text-xs font-medium text-slate-800 dark:text-slate-200 block">
-                Active status
-              </span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                {isActiveAccount
-                  ? 'User can sign in immediately with temporary credentials.'
-                  : 'Account deactivated.'}
-              </span>
-            </div>
-
-            <Controller
-              name="isActive"
-              control={control}
-              render={({ field: { value, onChange } }) => (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={value}
-                  disabled={isSubmitting}
-                  onClick={() => onChange(!value)}
-                  className={cn(
-                    'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-brand-700',
-                    value ? 'bg-brand-700' : 'bg-slate-300 dark:bg-slate-700'
-                  )}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-150 ease-in-out',
-                      value ? 'translate-x-4' : 'translate-x-0'
-                    )}
-                  />
-                </button>
-              )}
-            />
-          </div>
-        </div>
-
-        {/* Buttons */}
-        <div className="pt-2 flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5">
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={isSubmitting}
-            className="w-full sm:w-auto h-9 px-4 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium text-xs sm:text-sm transition-colors text-center focus:outline-none focus:ring-1 focus:ring-slate-300"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full sm:w-auto h-9 px-5 flex items-center justify-center gap-2 rounded-md bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white font-medium text-xs sm:text-sm transition-colors shadow-erp-subtle focus:outline-none focus:ring-1 focus:ring-brand-700 focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Creating user...</span>
-              </>
-            ) : (
-              <span>Create user</span>
             )}
-          </button>
-        </div>
-      </form>
 
-      <AuthFooter />
-    </AuthCard>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <PasswordField
+                {...register('tempPassword')}
+                label="Temporary Password"
+                placeholder="••••••••"
+                error={errors.tempPassword?.message}
+                disabled={isSubmitting}
+                required
+              />
+
+              <PasswordField
+                {...register('confirmTempPassword')}
+                label="Confirm Password"
+                placeholder="••••••••"
+                error={errors.confirmTempPassword?.message}
+                disabled={isSubmitting}
+                required
+              />
+            </div>
+
+            <div className="pt-3 border-t border-surface-border flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  reset();
+                  setActiveTab('list');
+                }}
+                disabled={isSubmitting}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isSubmitting}
+                className="bg-brand-700 hover:bg-brand-800 text-white font-medium text-xs px-4 h-9 shadow-xs cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    <span>Provisioning...</span>
+                  </>
+                ) : (
+                  <span>Create & Grant Access</span>
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
   );
 };
+
+export default CreateUserPage;

@@ -1,7 +1,19 @@
-import { useState } from 'react';
-import { FileText, Search, Filter, CreditCard, CheckCircle2, ArrowRight, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import {
+  FileText,
+  CreditCard,
+  CheckCircle2,
+  X,
+  BookOpen,
+  Printer,
+  User,
+  Calendar,
+  ExternalLink,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { TaxInvoiceDocument } from '@/components/documents/TaxInvoiceDocument';
 import {
   Table,
   TableHeader,
@@ -10,23 +22,71 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import {
-  INITIAL_INVOICES,
-  type Invoice,
-} from '@/data/erpData';
+import { useERP } from '@/context/ERPContext';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/app/config';
+import type { Invoice } from '@/data/erpData';
+import { OdooControlPanel, type ViewMode } from '@/components/layout/OdooControlPanel';
 
 export function InvoicesPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
+  const { id } = useParams<{ id?: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isContact, user } = useAuth();
+  const {
+    invoices,
+    createInvoice,
+    registerCustomerPayment,
+    contacts,
+    products,
+  } = useERP();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [activePaymentInvoice, setActivePaymentInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentJournal, setPaymentJournal] = useState<'BANK' | 'CASH'>('BANK');
+  const [paymentMethod, setPaymentMethod] = useState<'HDFC Bank Transfer' | 'Cash Register' | 'UPI'>('HDFC Bank Transfer');
   const [notice, setNotice] = useState<string | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  const filteredInvoices = invoices.filter((inv) => {
+  // New Invoice Form state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newCustomerId, setNewCustomerId] = useState('cnt-1');
+  const [newProductId, setNewProductId] = useState('prd-1');
+  const [newQuantity, setNewQuantity] = useState(1);
+
+  // Route triggers
+  useEffect(() => {
+    if (location.pathname === ROUTES.INVOICES_NEW) {
+      setIsCreateModalOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (id) {
+      const found = invoices.find(
+        (inv) => inv.id === id || inv.invoiceNumber.toLowerCase() === id.toLowerCase()
+      );
+      if (found) {
+        setSelectedInvoice(found);
+      }
+    }
+  }, [id, invoices]);
+
+  // If Contact portal, filter to customer's own invoices
+  const relevantInvoices = isContact
+    ? invoices.filter(
+        (inv) =>
+          inv.customerId === 'cnt-1' ||
+          inv.customerName.toLowerCase().includes(user?.fullName?.toLowerCase() || '')
+      )
+    : invoices;
+
+  const filteredInvoices = relevantInvoices.filter((inv) => {
     const matchesSearch =
       inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inv.customerName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -34,7 +94,7 @@ export function InvoicesPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const getStatusBadgeVariant = (status: Invoice['status']) => {
+  const getStatusBadgeVariant = (status: Invoice['status']): 'default' | 'secondary' | 'danger' | 'success' | 'warning' | 'info' | 'outline' => {
     switch (status) {
       case 'PAID':
         return 'success';
@@ -44,7 +104,7 @@ export function InvoicesPage() {
         return 'warning';
       case 'OVERDUE':
         return 'danger';
-      case 'DRAFT':
+      default:
         return 'default';
     }
   };
@@ -57,241 +117,526 @@ export function InvoicesPage() {
 
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activePaymentInvoice) return;
+    if (!activePaymentInvoice || paymentAmount <= 0) return;
 
-    const newAmountPaid = activePaymentInvoice.amountPaid + paymentAmount;
-    const newBalanceDue = Math.max(0, activePaymentInvoice.grandTotal - newAmountPaid);
-    const newStatus: Invoice['status'] = newBalanceDue === 0 ? 'PAID' : 'PARTIALLY_PAID';
-
-    setInvoices(
-      invoices.map((inv) =>
-        inv.id === activePaymentInvoice.id
-          ? {
-              ...inv,
-              amountPaid: newAmountPaid,
-              balanceDue: newBalanceDue,
-              status: newStatus,
-            }
-          : inv
-      )
+    const payment = registerCustomerPayment(
+      activePaymentInvoice.id,
+      paymentAmount,
+      paymentJournal,
+      paymentMethod
     );
 
-    setPaymentModalOpen(false);
-    setNotice(
-      `Payment of ₹${paymentAmount.toLocaleString('en-IN')} recorded for ${activePaymentInvoice.invoiceNumber} via ${paymentJournal}. Double Entry: Dr ${paymentJournal} Account, Cr Accounts Receivable.`
-    );
-    setTimeout(() => setNotice(null), 7000);
+    if (payment) {
+      setPaymentModalOpen(false);
+      setNotice(`Payment of ₹${paymentAmount.toLocaleString('en-IN')} successfully settled for ${activePaymentInvoice.invoiceNumber}.`);
+      setTimeout(() => setNotice(null), 5000);
+      if (selectedInvoice && selectedInvoice.id === activePaymentInvoice.id) {
+        setSelectedInvoice({
+          ...selectedInvoice,
+          amountPaid: selectedInvoice.amountPaid + paymentAmount,
+          balanceDue: Math.max(0, selectedInvoice.balanceDue - paymentAmount),
+          status: selectedInvoice.balanceDue - paymentAmount <= 0 ? 'PAID' : 'PARTIALLY_PAID',
+        });
+      }
+    }
+  };
+
+  const handleCreateDirectInvoice = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cust = contacts.find((c) => c.id === newCustomerId);
+    const prod = products.find((p) => p.id === newProductId);
+    if (!cust || !prod) return;
+
+    const subtotal = prod.salesPrice * newQuantity;
+    const taxAmount = Math.round(subtotal * 0.18);
+    const grandTotal = subtotal + taxAmount;
+
+    const line = {
+      id: `invl-${Date.now()}`,
+      productId: prod.id,
+      productName: prod.name,
+      quantity: newQuantity,
+      unitPrice: prod.salesPrice,
+      taxRate: 18,
+      subtotal,
+      taxAmount,
+      total: grandTotal,
+    };
+
+    const newInv = createInvoice({
+      customerId: cust.id,
+      customerName: cust.name,
+      issueDate: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+      status: 'POSTED',
+      lines: [line],
+      subtotal,
+      taxTotal: taxAmount,
+      grandTotal,
+      amountPaid: 0,
+      balanceDue: grandTotal,
+    });
+
+    setIsCreateModalOpen(false);
+    if (location.pathname === ROUTES.INVOICES_NEW) {
+      navigate(ROUTES.INVOICES);
+    }
+    setNotice(`Customer Invoice ${newInv.invoiceNumber} posted with balanced GL entry.`);
+    setTimeout(() => setNotice(null), 5000);
+  };
+
+  const closeDetail = () => {
+    setSelectedInvoice(null);
+    if (id) {
+      navigate(ROUTES.INVOICES);
+    }
   };
 
   return (
-    <div className="mx-auto max-w-dashboard space-y-5 p-4 lg:p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-surface-border pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-50 text-brand-700">
-              <FileText size={18} />
+    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary">
+      {/* Odoo Control Panel */}
+      <OdooControlPanel
+        title={isContact ? 'My Invoices' : 'Customer Invoices'}
+        subtitle={
+          isContact
+            ? 'Invoices billed to your account and settlement options'
+            : 'Tax invoices, accounts receivable, and customer payment reconciliation'
+        }
+        itemCount={filteredInvoices.length}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search invoice #, customer..."
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onNewClick={
+          !isContact
+            ? () => {
+                navigate(ROUTES.INVOICES_NEW);
+                setIsCreateModalOpen(true);
+              }
+            : undefined
+        }
+        newButtonLabel="New Invoice"
+        filterOptions={[
+          { label: 'All', value: 'ALL' },
+          { label: 'Unpaid / Open', value: 'POSTED' },
+          { label: 'Partially Paid', value: 'PARTIALLY_PAID' },
+          { label: 'Fully Paid', value: 'PAID' },
+        ]}
+        activeFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 max-w-7xl w-full mx-auto">
+        {notice && (
+          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
+              <span className="font-medium">{notice}</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-navy-900">Customer Invoices</h1>
-          </div>
-          <p className="mt-1 text-xs text-navy-400">
-            Accounts Receivable ledger, tax invoice generation, and customer payment reconciliation.
-          </p>
-        </div>
-      </div>
-
-      {/* Notice */}
-      {notice && (
-        <div className="flex items-center justify-between rounded-md border border-brand-200 bg-brand-50/80 p-3 text-xs text-brand-900">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-brand-700" />
-            <span>{notice}</span>
-          </div>
-          <button onClick={() => setNotice(null)} className="text-brand-600 hover:text-brand-900">
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
-      {/* Search & Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-navy-400" size={14} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search invoice #, customer..."
-            className="w-full rounded-md border border-surface-border bg-white py-1.5 pl-8 pr-3 text-xs text-navy-800 placeholder-navy-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-navy-400" />
-          <span className="text-xs text-navy-400">Status:</span>
-          {['ALL', 'POSTED', 'PAID', 'PARTIALLY_PAID', 'OVERDUE'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                statusFilter === st
-                  ? 'bg-brand-700 text-white shadow-sm'
-                  : 'bg-white border border-surface-border text-navy-600 hover:bg-surface-secondary'
-              }`}
-            >
-              {st}
+            <button onClick={() => setNotice(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
+              <X size={14} />
             </button>
-          ))}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* Invoices Table */}
-      <div className="rounded-lg border border-surface-border bg-white shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Invoice #</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Issue Date</TableHead>
-              <TableHead>Due Date</TableHead>
-              <TableHead className="text-right">Total (incl. GST)</TableHead>
-              <TableHead className="text-right">Paid</TableHead>
-              <TableHead className="text-right">Balance Due</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        {/* ============================================================ */}
+        {/* KANBAN VIEW (Odoo-Style Customer Invoice Cards)              */}
+        {/* ============================================================ */}
+        {viewMode === 'kanban' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredInvoices.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-xs text-navy-400">
-                  No invoices found matching criteria.
-                </TableCell>
-              </TableRow>
+              <div className="col-span-full py-12 text-center text-xs text-text-muted bg-white rounded-lg border border-surface-border">
+                No invoices found matching criteria.
+              </div>
             ) : (
               filteredInvoices.map((inv) => (
-                <TableRow key={inv.id} className="hover:bg-surface-secondary/60">
-                  <TableCell className="font-mono text-xs font-semibold text-brand-700">
-                    {inv.invoiceNumber}
-                  </TableCell>
-                  <TableCell className="font-medium text-navy-900">{inv.customerName}</TableCell>
-                  <TableCell className="text-xs text-navy-500">{inv.issueDate}</TableCell>
-                  <TableCell className="text-xs text-navy-500">{inv.dueDate}</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-navy-900">
-                    ₹{inv.grandTotal.toLocaleString('en-IN')}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs text-status-success">
-                    ₹{inv.amountPaid.toLocaleString('en-IN')}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs font-semibold text-status-danger">
-                    ₹{inv.balanceDue.toLocaleString('en-IN')}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={getStatusBadgeVariant(inv.status)}>{inv.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedInvoice(inv)}
-                        className="h-7 text-[11px] px-2"
-                      >
-                        View
-                      </Button>
+                <div
+                  key={inv.id}
+                  onClick={() => setSelectedInvoice(inv)}
+                  className="group bg-white rounded-lg border border-surface-border hover:border-navy-400 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer relative overflow-hidden"
+                >
+                  <div className="space-y-2.5">
+                    {/* Top Row: Invoice # and Status Badge */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <FileText size={15} className="text-navy-600" />
+                        <span className="font-mono font-bold text-sm text-navy-950 group-hover:text-brand-700 transition-colors">
+                          {inv.invoiceNumber}
+                        </span>
+                      </div>
+                      <Badge variant={getStatusBadgeVariant(inv.status)} className="text-[10px] px-1.5 py-0 font-semibold">
+                        {inv.status}
+                      </Badge>
+                    </div>
+
+                    {/* Customer Identity */}
+                    <div className="flex items-center gap-1.5 text-xs text-navy-800 font-semibold truncate pt-1">
+                      <User size={13} className="text-text-muted shrink-0" />
+                      <span className="truncate">{inv.customerName}</span>
+                    </div>
+
+                    {/* Dates */}
+                    <div className="flex items-center justify-between text-[11px] text-text-muted pt-1 border-t border-slate-100">
+                      <span className="flex items-center gap-1">
+                        <Calendar size={11} /> {inv.issueDate}
+                      </span>
+                      <span>Due: {inv.dueDate}</span>
+                    </div>
+                  </div>
+
+                  {/* Financial Amounts & Action */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-end justify-between">
+                    <div>
+                      <span className="text-[10px] text-text-muted block uppercase tracking-wider font-semibold">Total Invoice</span>
+                      <span className="font-mono font-bold text-sm text-navy-900">
+                        ₹{inv.grandTotal.toLocaleString('en-IN')}
+                      </span>
+                      {inv.balanceDue > 0 && (
+                        <div className="text-[11px] font-mono text-red-600 font-medium mt-0.5">
+                          Due: ₹{inv.balanceDue.toLocaleString('en-IN')}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       {inv.balanceDue > 0 && (
                         <Button
-                          variant="primary"
                           size="sm"
                           onClick={() => handleOpenPayment(inv)}
-                          className="h-7 text-[11px] px-2 bg-brand-700 hover:bg-brand-800"
+                          className="h-7 text-[11px] px-2.5 bg-navy-900 hover:bg-navy-800 text-white font-medium cursor-pointer shadow-2xs"
                         >
-                          <CreditCard size={12} className="mr-1" />
+                          <CreditCard size={11} className="mr-1" />
                           Pay
                         </Button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedInvoice(inv);
+                          setIsPrintModalOpen(true);
+                        }}
+                        title="Print / Export Tax Invoice PDF"
+                        className="p-1.5 rounded-md text-text-muted hover:text-navy-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        <Printer size={14} />
+                      </button>
                     </div>
-                  </TableCell>
-                </TableRow>
+                  </div>
+                </div>
               ))
             )}
-          </TableBody>
-        </Table>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* LIST VIEW (Table)                                           */}
+        {/* ============================================================ */}
+        {viewMode === 'list' && (
+          <div className="rounded-lg border border-surface-border bg-white shadow-2xs overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead>Invoice #</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Issue Date</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead className="text-right">Total (incl. GST)</TableHead>
+                  <TableHead className="text-right">Paid</TableHead>
+                  <TableHead className="text-right">Balance Due</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredInvoices.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-8 text-center text-xs text-text-muted">
+                      No invoices found matching criteria.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredInvoices.map((inv) => (
+                    <TableRow
+                      key={inv.id}
+                      onClick={() => setSelectedInvoice(inv)}
+                      className="cursor-pointer hover:bg-slate-50 transition-colors"
+                    >
+                      <TableCell className="font-mono text-xs font-semibold text-brand-700">
+                        {inv.invoiceNumber}
+                      </TableCell>
+                      <TableCell className="font-medium text-navy-900 text-xs">{inv.customerName}</TableCell>
+                      <TableCell className="text-xs text-text-muted">{inv.issueDate}</TableCell>
+                      <TableCell className="text-xs text-text-muted">{inv.dueDate}</TableCell>
+                      <TableCell className="text-right font-mono text-xs font-bold text-navy-900">
+                        ₹{inv.grandTotal.toLocaleString('en-IN')}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-emerald-700 font-semibold">
+                        ₹{inv.amountPaid.toLocaleString('en-IN')}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs font-semibold text-red-600">
+                        ₹{inv.balanceDue.toLocaleString('en-IN')}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={getStatusBadgeVariant(inv.status)}>{inv.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedInvoice(inv)}
+                            className="h-7 text-[11px] px-2 cursor-pointer"
+                          >
+                            View
+                          </Button>
+                          {inv.balanceDue > 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleOpenPayment(inv)}
+                              className="h-7 text-[11px] px-2 bg-navy-900 hover:bg-navy-800 text-white cursor-pointer"
+                            >
+                              <CreditCard size={11} className="mr-1" />
+                              Pay
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedInvoice(inv);
+                              setIsPrintModalOpen(true);
+                            }}
+                            className="h-7 text-[11px] px-2 text-text-muted hover:text-navy-900 cursor-pointer"
+                          >
+                            <Printer size={12} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
 
-      {/* Register Payment Modal */}
+      {/* ============================================================ */}
+      {/* INVOICE DETAIL DRAWER                                        */}
+      {/* ============================================================ */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-surface-border pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-navy-900">{selectedInvoice.invoiceNumber}</h3>
+                  <Badge variant={getStatusBadgeVariant(selectedInvoice.status)}>
+                    {selectedInvoice.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Billed to: <span className="font-semibold text-navy-900">{selectedInvoice.customerName}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="flex items-center gap-1 text-xs cursor-pointer"
+                >
+                  <Printer size={13} />
+                  <span>Print / PDF</span>
+                </Button>
+                <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Invoicing Dates & GL Link */}
+            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] text-text-muted uppercase">Issue Date</span>
+                <p className="font-semibold text-navy-900 mt-0.5">{selectedInvoice.issueDate}</p>
+              </div>
+              <div>
+                <span className="text-[10px] text-text-muted uppercase">Due Date</span>
+                <p className="font-semibold text-navy-900 mt-0.5">{selectedInvoice.dueDate}</p>
+              </div>
+              <div>
+                <span className="text-[10px] text-text-muted uppercase">Accounting Link</span>
+                <p className="font-mono font-semibold text-brand-700 mt-0.5 flex items-center gap-1">
+                  <BookOpen size={12} /> {selectedInvoice.journalEntryId || 'Posted in GL'}
+                </p>
+              </div>
+            </div>
+
+            {/* Line Items Table */}
+            <div>
+              <span className="text-xs font-bold text-navy-900 uppercase tracking-wider block mb-2">
+                Itemized Products & GST (18%)
+              </span>
+              <div className="rounded-lg border border-surface-border overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-surface-border text-navy-600">
+                    <tr>
+                      <th className="p-2.5">Item Description</th>
+                      <th className="p-2.5 text-right">Qty</th>
+                      <th className="p-2.5 text-right">Unit Rate</th>
+                      <th className="p-2.5 text-right">GST (18%)</th>
+                      <th className="p-2.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedInvoice.lines.map((ln) => (
+                      <tr key={ln.id}>
+                        <td className="p-2.5 font-medium text-navy-900">{ln.productName}</td>
+                        <td className="p-2.5 text-right font-mono">{ln.quantity}</td>
+                        <td className="p-2.5 text-right font-mono">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right font-mono text-text-muted">₹{ln.taxAmount.toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right font-mono font-semibold text-navy-900">
+                          ₹{ln.total.toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Totals Summary */}
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+              <div className="flex justify-between text-navy-600">
+                <span>Subtotal (Excl. Tax)</span>
+                <span className="font-mono">₹{selectedInvoice.subtotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between text-navy-600">
+                <span>Output GST (9% CGST + 9% SGST)</span>
+                <span className="font-mono">₹{selectedInvoice.taxTotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between font-bold text-sm text-navy-900 pt-1.5 border-t border-slate-200">
+                <span>Grand Total</span>
+                <span className="font-mono">₹{selectedInvoice.grandTotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-xs text-red-600 pt-1">
+                <span>Outstanding Balance Due</span>
+                <span className="font-mono">₹{selectedInvoice.balanceDue.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-surface-border">
+              <Link
+                to={`${ROUTES.ACCOUNTING}/one-truth`}
+                className="text-xs text-brand-700 hover:underline flex items-center gap-1"
+              >
+                <span>View One-Truth Double-Entry</span>
+                <ExternalLink size={11} />
+              </Link>
+              <div className="flex items-center gap-2">
+                {selectedInvoice.balanceDue > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleOpenPayment(selectedInvoice)}
+                    className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
+                  >
+                    <CreditCard size={13} className="mr-1.5" />
+                    Register Payment
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={closeDetail} className="cursor-pointer">
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* REGISTER PAYMENT MODAL                                       */}
+      {/* ============================================================ */}
       {paymentModalOpen && activePaymentInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 p-4">
-          <div className="w-full max-w-md rounded-lg border border-surface-border bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <div>
                 <h3 className="text-base font-bold text-navy-900">Register Customer Payment</h3>
-                <p className="text-xs text-navy-400">
-                  Invoice: {activePaymentInvoice.invoiceNumber} &bull; {activePaymentInvoice.customerName}
-                </p>
+                <p className="text-xs text-text-muted">Settlement voucher for {activePaymentInvoice.invoiceNumber}</p>
               </div>
-              <button
-                onClick={() => setPaymentModalOpen(false)}
-                className="rounded p-1 text-navy-400 hover:bg-surface-secondary"
-              >
+              <button onClick={() => setPaymentModalOpen(false)} className="text-text-muted hover:text-navy-900 cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleRegisterPayment} className="mt-4 space-y-4">
+            <form onSubmit={handleRegisterPayment} className="space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex justify-between text-navy-600 mb-1">
+                  <span>Customer:</span>
+                  <span className="font-semibold text-navy-900">{activePaymentInvoice.customerName}</span>
+                </div>
+                <div className="flex justify-between text-navy-600">
+                  <span>Balance Due:</span>
+                  <span className="font-mono font-bold text-red-600">
+                    ₹{activePaymentInvoice.balanceDue.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-navy-700 mb-1">
-                  Payment Amount (₹)
-                </label>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Payment Amount (₹) *</label>
                 <input
                   type="number"
-                  min="1"
+                  min={1}
                   max={activePaymentInvoice.balanceDue}
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono font-bold text-navy-900 focus:border-brand-500 focus:outline-none"
                   required
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
                 />
-                <span className="text-[11px] text-navy-400">
-                  Outstanding balance: ₹{activePaymentInvoice.balanceDue.toLocaleString('en-IN')}
-                </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-navy-700 mb-1">
-                  Deposit Journal
-                </label>
-                <select
-                  value={paymentJournal}
-                  onChange={(e) => setPaymentJournal(e.target.value as 'BANK' | 'CASH')}
-                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-800 focus:border-brand-500 focus:outline-none"
-                >
-                  <option value="BANK">HDFC Bank Current Account (Bank Journal)</option>
-                  <option value="CASH">Cash in Hand (Cash Register Journal)</option>
-                </select>
-              </div>
-
-              {/* Accounting Impact Preview */}
-              <div className="rounded-md border border-brand-200 bg-brand-50/50 p-3 text-xs space-y-1">
-                <span className="font-semibold text-brand-900 flex items-center gap-1">
-                  <ArrowRight size={12} /> Double-Entry Accounting Impact:
-                </span>
-                <div className="flex justify-between text-navy-600 font-mono text-[11px] pt-1">
-                  <span>Debit: {paymentJournal === 'BANK' ? '1002 HDFC Bank' : '1001 Cash'}</span>
-                  <span>+₹{paymentAmount.toLocaleString('en-IN')}</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Destination Journal</label>
+                  <select
+                    value={paymentJournal}
+                    onChange={(e) => setPaymentJournal(e.target.value as 'BANK' | 'CASH')}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                  >
+                    <option value="BANK">HDFC Bank Account</option>
+                    <option value="CASH">Cash Register</option>
+                  </select>
                 </div>
-                <div className="flex justify-between text-navy-600 font-mono text-[11px]">
-                  <span>Credit: 1003 Accounts Receivable</span>
-                  <span>-₹{paymentAmount.toLocaleString('en-IN')}</span>
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Payment Mode</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'HDFC Bank Transfer' | 'Cash Register' | 'UPI')}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                  >
+                    <option value="HDFC Bank Transfer">NEFT / Bank Transfer</option>
+                    <option value="UPI">UPI Digital Payment</option>
+                    <option value="Cash Register">Cash Voucher</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-[11px] text-emerald-900">
+                <span className="font-semibold">Double-Entry Impact:</span> Will debit Cash/Bank and credit Accounts Receivable (Debtors), updating the General Ledger immediately.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button type="button" variant="outline" size="sm" onClick={() => setPaymentModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" size="sm" className="bg-brand-700 hover:bg-brand-800">
-                  Confirm Payment Entry
+                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                  Confirm & Post Payment
                 </Button>
               </div>
             </form>
@@ -299,99 +644,153 @@ export function InvoicesPage() {
         </div>
       )}
 
-      {/* Invoice Detail Modal */}
-      {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 p-4">
-          <div className="w-full max-w-lg rounded-lg border border-surface-border bg-white p-6 shadow-xl space-y-4">
+      {/* ============================================================ */}
+      {/* DIRECT INVOICE CREATION MODAL                                */}
+      {/* ============================================================ */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="text-brand-600" size={20} />
-                <div>
-                  <h3 className="font-bold text-navy-900">{selectedInvoice.invoiceNumber}</h3>
-                  <span className="text-[11px] text-navy-400">Urban Furniture Tax Invoice</span>
-                </div>
+              <div>
+                <h3 className="text-base font-bold text-navy-900">Create Tax Invoice</h3>
+                <p className="text-xs text-text-muted">Direct invoice billing to customer</p>
               </div>
-              <button onClick={() => setSelectedInvoice(null)} className="text-navy-400 hover:text-navy-600">
+              <button
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  if (location.pathname === ROUTES.INVOICES_NEW) navigate(ROUTES.INVOICES);
+                }}
+                className="text-text-muted hover:text-navy-900 cursor-pointer"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <form onSubmit={handleCreateDirectInvoice} className="space-y-3.5 text-xs">
               <div>
-                <span className="text-navy-400">Billed To:</span>
-                <p className="font-semibold text-navy-900 mt-0.5">{selectedInvoice.customerName}</p>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Customer *</label>
+                <select
+                  value={newCustomerId}
+                  onChange={(e) => setNewCustomerId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  {contacts
+                    .filter((c) => c.type === 'CUSTOMER' || c.type === 'BOTH')
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.city})
+                      </option>
+                    ))}
+                </select>
               </div>
-              <div className="text-right">
-                <span className="text-navy-400">Status:</span>
-                <div className="mt-0.5">
-                  <Badge variant={getStatusBadgeVariant(selectedInvoice.status)}>{selectedInvoice.status}</Badge>
-                </div>
-              </div>
+
               <div>
-                <span className="text-navy-400">Issue Date:</span>
-                <p className="text-navy-700 mt-0.5">{selectedInvoice.issueDate}</p>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Product Item *</label>
+                <select
+                  value={newProductId}
+                  onChange={(e) => setNewProductId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — ₹{p.salesPrice.toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="text-right">
-                <span className="text-navy-400">Due Date:</span>
-                <p className="text-navy-700 mt-0.5">{selectedInvoice.dueDate}</p>
-              </div>
-            </div>
 
-            <div className="border-t border-surface-border pt-3">
-              <span className="text-xs font-semibold text-navy-800 block mb-1.5">Line Items:</span>
-              {selectedInvoice.lines.map((l) => (
-                <div key={l.id} className="flex justify-between py-1 text-xs border-b border-surface-secondary">
-                  <span>{l.productName} &times; {l.quantity}</span>
-                  <span className="font-mono">₹{l.total.toLocaleString('en-IN')}</span>
-                </div>
-              ))}
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={newQuantity}
+                  onChange={(e) => setNewQuantity(Math.max(1, Number(e.target.value)))}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
+                />
+              </div>
 
-            <div className="rounded-md bg-surface-secondary p-3 text-xs space-y-1">
-              <div className="flex justify-between text-navy-500">
-                <span>Subtotal:</span>
-                <span className="font-mono">₹{selectedInvoice.subtotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-navy-500">
-                <span>GST (18% Output):</span>
-                <span className="font-mono">₹{selectedInvoice.taxTotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between font-bold text-navy-900 border-t border-surface-border pt-1">
-                <span>Total Amount:</span>
-                <span className="font-mono text-brand-700">₹{selectedInvoice.grandTotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-status-success font-semibold">
-                <span>Paid to Date:</span>
-                <span className="font-mono">₹{selectedInvoice.amountPaid.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-status-danger font-semibold">
-                <span>Outstanding Balance:</span>
-                <span className="font-mono">₹{selectedInvoice.balanceDue.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setSelectedInvoice(null)}>
-                Close
-              </Button>
-              {selectedInvoice.balanceDue > 0 && (
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button
-                  variant="primary"
+                  type="button"
+                  variant="outline"
                   size="sm"
                   onClick={() => {
-                    setSelectedInvoice(null);
-                    handleOpenPayment(selectedInvoice);
+                    setIsCreateModalOpen(false);
+                    if (location.pathname === ROUTES.INVOICES_NEW) navigate(ROUTES.INVOICES);
                   }}
-                  className="bg-brand-700 hover:bg-brand-800"
                 >
-                  <CreditCard size={13} className="mr-1.5" />
-                  Register Payment
+                  Cancel
                 </Button>
-              )}
+                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                  Generate & Post Invoice
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* TAX INVOICE PRINT & PDF DOCUMENT MODAL                       */}
+      {/* ============================================================ */}
+      {isPrintModalOpen && selectedInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="relative w-full max-w-3xl bg-white rounded-xl shadow-2xl p-6 my-8 space-y-4">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3 no-print">
+              <div className="flex items-center gap-2">
+                <Printer size={18} className="text-navy-700" />
+                <h3 className="font-bold text-navy-900 text-sm">Print / PDF Preview: {selectedInvoice.invoiceNumber}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
+                >
+                  <Printer size={13} className="mr-1.5" />
+                  Print / Save PDF
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="text-text-muted hover:text-navy-900 p-1 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
+
+            <TaxInvoiceDocument
+              documentType="INVOICE"
+              documentNumber={selectedInvoice.invoiceNumber}
+              date={selectedInvoice.issueDate}
+              dueDate={selectedInvoice.dueDate}
+              partnerName={selectedInvoice.customerName}
+              partnerAddress="Mumbai, Maharashtra - 400001"
+              lines={selectedInvoice.lines.map((ln) => ({
+                id: ln.id,
+                name: ln.productName,
+                quantity: ln.quantity,
+                unitPrice: ln.unitPrice,
+                subtotal: ln.subtotal,
+                tax: ln.taxAmount,
+                total: ln.total,
+              }))}
+              subtotal={selectedInvoice.subtotal}
+              taxTotal={selectedInvoice.taxTotal}
+              grandTotal={selectedInvoice.grandTotal}
+              amountPaid={selectedInvoice.amountPaid}
+              balanceDue={selectedInvoice.balanceDue}
+              status={selectedInvoice.status}
+              onClose={() => setIsPrintModalOpen(false)}
+            />
           </div>
         </div>
       )}
     </div>
   );
 }
+
+export default InvoicesPage;

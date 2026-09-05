@@ -14,5 +14,6 @@ router.use(requireRole(ROLES.ADMIN));
 
 router.post('/', validateBody(createUserSchema), userController.createUser);
 router.get('/', validateQuery(listUsersQuerySchema), userController.listUsers);
+router.patch('/:id/status', userController.toggleUserStatus);
 
 export default router;

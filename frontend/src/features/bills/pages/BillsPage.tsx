@@ -1,7 +1,19 @@
-import { useState } from 'react';
-import { Receipt, Search, Filter, CreditCard, CheckCircle2, ArrowRight, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import {
+  Receipt,
+  CreditCard,
+  CheckCircle2,
+  X,
+  BookOpen,
+  Printer,
+  Building2,
+  Calendar,
+  ExternalLink,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { TaxInvoiceDocument } from '@/components/documents/TaxInvoiceDocument';
 import {
   Table,
   TableHeader,
@@ -10,23 +22,70 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import {
-  INITIAL_BILLS,
-  type Bill,
-} from '@/data/erpData';
+import { useERP } from '@/context/ERPContext';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/app/config';
+import type { Bill } from '@/data/erpData';
+import { OdooControlPanel, type ViewMode } from '@/components/layout/OdooControlPanel';
 
 export function BillsPage() {
-  const [bills, setBills] = useState<Bill[]>(INITIAL_BILLS);
+  const { id } = useParams<{ id?: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isContact, user } = useAuth();
+  const {
+    bills,
+    createBill,
+    registerVendorPayment,
+    contacts,
+    products,
+  } = useERP();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [activePaymentBill, setActivePaymentBill] = useState<Bill | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentJournal, setPaymentJournal] = useState<'BANK' | 'CASH'>('BANK');
+  const [paymentMethod, setPaymentMethod] = useState<'HDFC Bank Transfer' | 'Cash Register' | 'UPI'>('HDFC Bank Transfer');
   const [notice, setNotice] = useState<string | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  const filteredBills = bills.filter((b) => {
+  // New Bill Form
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newVendorId, setNewVendorId] = useState('cnt-2');
+  const [newProductId, setNewProductId] = useState('prd-1');
+  const [newQuantity, setNewQuantity] = useState(5);
+
+  useEffect(() => {
+    if (location.pathname === ROUTES.BILLS_NEW) {
+      setIsCreateModalOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (id) {
+      const found = bills.find(
+        (b) => b.id === id || b.billNumber.toLowerCase() === id.toLowerCase()
+      );
+      if (found) {
+        setSelectedBill(found);
+      }
+    }
+  }, [id, bills]);
+
+  // If Contact portal, filter to vendor's own bills
+  const relevantBills = isContact
+    ? bills.filter(
+        (b) =>
+          b.vendorId === 'cnt-2' ||
+          b.vendorName.toLowerCase().includes(user?.fullName?.toLowerCase() || '')
+      )
+    : bills;
+
+  const filteredBills = relevantBills.filter((b) => {
     const matchesSearch =
       b.billNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       b.vendorName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -34,7 +93,7 @@ export function BillsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const getStatusBadgeVariant = (status: Bill['status']) => {
+  const getStatusBadgeVariant = (status: Bill['status']): 'default' | 'secondary' | 'danger' | 'success' | 'warning' | 'info' | 'outline' => {
     switch (status) {
       case 'PAID':
         return 'success';
@@ -44,252 +103,539 @@ export function BillsPage() {
         return 'warning';
       case 'OVERDUE':
         return 'danger';
-      case 'DRAFT':
+      default:
         return 'default';
     }
   };
 
-  const handleOpenPayment = (b: Bill) => {
-    setActivePaymentBill(b);
-    setPaymentAmount(b.balanceDue);
+  const handleOpenPayment = (bill: Bill) => {
+    setActivePaymentBill(bill);
+    setPaymentAmount(bill.balanceDue);
     setPaymentModalOpen(true);
   };
 
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activePaymentBill) return;
+    if (!activePaymentBill || paymentAmount <= 0) return;
 
-    const newAmountPaid = activePaymentBill.amountPaid + paymentAmount;
-    const newBalanceDue = Math.max(0, activePaymentBill.grandTotal - newAmountPaid);
-    const newStatus: Bill['status'] = newBalanceDue === 0 ? 'PAID' : 'PARTIALLY_PAID';
-
-    setBills(
-      bills.map((b) =>
-        b.id === activePaymentBill.id
-          ? {
-              ...b,
-              amountPaid: newAmountPaid,
-              balanceDue: newBalanceDue,
-              status: newStatus,
-            }
-          : b
-      )
+    const payment = registerVendorPayment(
+      activePaymentBill.id,
+      paymentAmount,
+      paymentJournal,
+      paymentMethod
     );
 
-    setPaymentModalOpen(false);
-    setNotice(
-      `Vendor payment of ₹${paymentAmount.toLocaleString('en-IN')} recorded for ${activePaymentBill.billNumber} to ${activePaymentBill.vendorName}. Double Entry: Dr Accounts Payable, Cr ${paymentJournal} Account.`
-    );
-    setTimeout(() => setNotice(null), 7000);
+    if (payment) {
+      setPaymentModalOpen(false);
+      setNotice(`Vendor disbursement of ₹${paymentAmount.toLocaleString('en-IN')} successfully settled for ${activePaymentBill.billNumber}.`);
+      setTimeout(() => setNotice(null), 5000);
+      if (selectedBill && selectedBill.id === activePaymentBill.id) {
+        setSelectedBill({
+          ...selectedBill,
+          amountPaid: selectedBill.amountPaid + paymentAmount,
+          balanceDue: Math.max(0, selectedBill.balanceDue - paymentAmount),
+          status: selectedBill.balanceDue - paymentAmount <= 0 ? 'PAID' : 'PARTIALLY_PAID',
+        });
+      }
+    }
+  };
+
+  const handleCreateDirectBill = (e: React.FormEvent) => {
+    e.preventDefault();
+    const vendor = contacts.find((c) => c.id === newVendorId);
+    const prod = products.find((p) => p.id === newProductId);
+    if (!vendor || !prod) return;
+
+    const subtotal = prod.purchasePrice * newQuantity;
+    const taxAmount = Math.round(subtotal * 0.18);
+    const grandTotal = subtotal + taxAmount;
+
+    const line = {
+      id: `billl-${Date.now()}`,
+      productId: prod.id,
+      productName: prod.name,
+      quantity: newQuantity,
+      unitPrice: prod.purchasePrice,
+      taxRate: 18,
+      subtotal,
+      taxAmount,
+      total: grandTotal,
+    };
+
+    const newB = createBill({
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      billDate: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+      status: 'POSTED',
+      lines: [line],
+      subtotal,
+      taxTotal: taxAmount,
+      grandTotal,
+      amountPaid: 0,
+      balanceDue: grandTotal,
+    });
+
+    setIsCreateModalOpen(false);
+    if (location.pathname === ROUTES.BILLS_NEW) {
+      navigate(ROUTES.BILLS);
+    }
+    setNotice(`Vendor Bill ${newB.billNumber} posted with balanced double-entry GL.`);
+    setTimeout(() => setNotice(null), 5000);
+  };
+
+  const closeDetail = () => {
+    setSelectedBill(null);
+    if (id) {
+      navigate(ROUTES.BILLS);
+    }
   };
 
   return (
-    <div className="mx-auto max-w-dashboard space-y-5 p-4 lg:p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-surface-border pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-50 text-brand-700">
-              <Receipt size={18} />
+    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary">
+      {/* Odoo Control Panel */}
+      <OdooControlPanel
+        title={isContact ? 'My Bills' : 'Vendor Bills'}
+        subtitle={
+          isContact
+            ? 'Bills associated with your supplier account'
+            : 'Supplier bills, accounts payable, input tax credits, and payment disbursements'
+        }
+        itemCount={filteredBills.length}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search bill #, vendor name..."
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onNewClick={
+          !isContact
+            ? () => {
+                navigate(ROUTES.BILLS_NEW);
+                setIsCreateModalOpen(true);
+              }
+            : undefined
+        }
+        newButtonLabel="New Bill"
+        filterOptions={[
+          { label: 'All', value: 'ALL' },
+          { label: 'Open / Unpaid', value: 'POSTED' },
+          { label: 'Partially Paid', value: 'PARTIALLY_PAID' },
+          { label: 'Fully Paid', value: 'PAID' },
+        ]}
+        activeFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 max-w-7xl w-full mx-auto">
+        {notice && (
+          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
+              <span className="font-medium">{notice}</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-navy-900">Vendor Bills</h1>
+            <button onClick={() => setNotice(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
+              <X size={14} />
+            </button>
           </div>
-          <p className="mt-1 text-xs text-navy-400">
-            Accounts Payable ledger, supplier invoices for raw wood & hardware, and vendor disbursements.
-          </p>
-        </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* KANBAN VIEW (Odoo-Style Vendor Bill Cards)                   */}
+        {/* ============================================================ */}
+        {viewMode === 'kanban' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredBills.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-xs text-text-muted bg-white rounded-lg border border-surface-border">
+                No vendor bills found matching criteria.
+              </div>
+            ) : (
+              filteredBills.map((b) => (
+                <div
+                  key={b.id}
+                  onClick={() => setSelectedBill(b)}
+                  className="group bg-white rounded-lg border border-surface-border hover:border-navy-400 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer relative overflow-hidden"
+                >
+                  <div className="space-y-2.5">
+                    {/* Top Row: Bill # & Status */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Receipt size={15} className="text-navy-600" />
+                        <span className="font-mono font-bold text-sm text-navy-950 group-hover:text-brand-700 transition-colors">
+                          {b.billNumber}
+                        </span>
+                      </div>
+                      <Badge variant={getStatusBadgeVariant(b.status)} className="text-[10px] px-1.5 py-0 font-semibold">
+                        {b.status}
+                      </Badge>
+                    </div>
+
+                    {/* Vendor Name */}
+                    <div className="flex items-center gap-1.5 text-xs text-navy-800 font-semibold truncate pt-1">
+                      <Building2 size={13} className="text-text-muted shrink-0" />
+                      <span className="truncate">{b.vendorName}</span>
+                    </div>
+
+                    {/* Dates */}
+                    <div className="flex items-center justify-between text-[11px] text-text-muted pt-1 border-t border-slate-100">
+                      <span className="flex items-center gap-1">
+                        <Calendar size={11} /> {b.billDate}
+                      </span>
+                      <span>Due: {b.dueDate}</span>
+                    </div>
+                  </div>
+
+                  {/* Financial Amounts & Action */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-end justify-between">
+                    <div>
+                      <span className="text-[10px] text-text-muted block uppercase tracking-wider font-semibold">Total Bill</span>
+                      <span className="font-mono font-bold text-sm text-navy-900">
+                        ₹{b.grandTotal.toLocaleString('en-IN')}
+                      </span>
+                      {b.balanceDue > 0 && (
+                        <div className="text-[11px] font-mono text-red-600 font-medium mt-0.5">
+                          Payable: ₹{b.balanceDue.toLocaleString('en-IN')}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {b.balanceDue > 0 && !isContact && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenPayment(b)}
+                          className="h-7 text-[11px] px-2.5 bg-navy-900 hover:bg-navy-800 text-white font-medium cursor-pointer shadow-2xs"
+                        >
+                          <CreditCard size={11} className="mr-1" />
+                          Pay
+                        </Button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedBill(b);
+                          setIsPrintModalOpen(true);
+                        }}
+                        title="Print / Export Bill PDF"
+                        className="p-1.5 rounded-md text-text-muted hover:text-navy-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        <Printer size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* LIST VIEW (Table)                                           */}
+        {/* ============================================================ */}
+        {viewMode === 'list' && (
+          <div className="rounded-lg border border-surface-border bg-white shadow-2xs overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead>Bill #</TableHead>
+                  <TableHead>Vendor / Supplier</TableHead>
+                  <TableHead>Bill Date</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead className="text-right">Total (incl. GST)</TableHead>
+                  <TableHead className="text-right">Paid</TableHead>
+                  <TableHead className="text-right">Balance Due</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredBills.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-8 text-center text-xs text-text-muted">
+                      No vendor bills found matching criteria.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredBills.map((b) => (
+                    <TableRow
+                      key={b.id}
+                      onClick={() => setSelectedBill(b)}
+                      className="cursor-pointer hover:bg-slate-50 transition-colors"
+                    >
+                      <TableCell className="font-mono text-xs font-semibold text-brand-700">
+                        {b.billNumber}
+                      </TableCell>
+                      <TableCell className="font-medium text-navy-900 text-xs">{b.vendorName}</TableCell>
+                      <TableCell className="text-xs text-text-muted">{b.billDate}</TableCell>
+                      <TableCell className="text-xs text-text-muted">{b.dueDate}</TableCell>
+                      <TableCell className="text-right font-mono text-xs font-bold text-navy-900">
+                        ₹{b.grandTotal.toLocaleString('en-IN')}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-emerald-700 font-semibold">
+                        ₹{b.amountPaid.toLocaleString('en-IN')}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs font-semibold text-red-600">
+                        ₹{b.balanceDue.toLocaleString('en-IN')}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={getStatusBadgeVariant(b.status)}>{b.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedBill(b)}
+                            className="h-7 text-[11px] px-2 cursor-pointer"
+                          >
+                            View
+                          </Button>
+                          {b.balanceDue > 0 && !isContact && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleOpenPayment(b)}
+                              className="h-7 text-[11px] px-2 bg-navy-900 hover:bg-navy-800 text-white cursor-pointer"
+                            >
+                              <CreditCard size={11} className="mr-1" />
+                              Pay
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedBill(b);
+                              setIsPrintModalOpen(true);
+                            }}
+                            className="h-7 text-[11px] px-2 text-text-muted hover:text-navy-900 cursor-pointer"
+                          >
+                            <Printer size={12} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
 
-      {notice && (
-        <div className="flex items-center justify-between rounded-md border border-brand-200 bg-brand-50/80 p-3 text-xs text-brand-900">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-brand-700" />
-            <span>{notice}</span>
+      {/* ============================================================ */}
+      {/* VENDOR BILL DETAIL DRAWER                                    */}
+      {/* ============================================================ */}
+      {selectedBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-surface-border pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-navy-900">{selectedBill.billNumber}</h3>
+                  <Badge variant={getStatusBadgeVariant(selectedBill.status)}>
+                    {selectedBill.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Vendor: <span className="font-semibold text-navy-900">{selectedBill.vendorName}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="flex items-center gap-1 text-xs cursor-pointer"
+                >
+                  <Printer size={13} />
+                  <span>Print / PDF</span>
+                </Button>
+                <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Bill Dates & GL Link */}
+            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] text-text-muted uppercase">Bill Date</span>
+                <p className="font-semibold text-navy-900 mt-0.5">{selectedBill.billDate}</p>
+              </div>
+              <div>
+                <span className="text-[10px] text-text-muted uppercase">Due Date</span>
+                <p className="font-semibold text-navy-900 mt-0.5">{selectedBill.dueDate}</p>
+              </div>
+              <div>
+                <span className="text-[10px] text-text-muted uppercase">Accounting Entry</span>
+                <p className="font-mono font-semibold text-brand-700 mt-0.5 flex items-center gap-1">
+                  <BookOpen size={12} /> {selectedBill.journalEntryId || 'Posted in AP'}
+                </p>
+              </div>
+            </div>
+
+            {/* Line Items Table */}
+            <div>
+              <span className="text-xs font-bold text-navy-900 uppercase tracking-wider block mb-2">
+                Purchased Materials & Input GST (18%)
+              </span>
+              <div className="rounded-lg border border-surface-border overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-surface-border text-navy-600">
+                    <tr>
+                      <th className="p-2.5">Material Description</th>
+                      <th className="p-2.5 text-right">Qty</th>
+                      <th className="p-2.5 text-right">Unit Rate</th>
+                      <th className="p-2.5 text-right">GST (18%)</th>
+                      <th className="p-2.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedBill.lines.map((ln) => (
+                      <tr key={ln.id}>
+                        <td className="p-2.5 font-medium text-navy-900">{ln.productName}</td>
+                        <td className="p-2.5 text-right font-mono">{ln.quantity}</td>
+                        <td className="p-2.5 text-right font-mono">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right font-mono text-text-muted">₹{ln.taxAmount.toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right font-mono font-semibold text-navy-900">
+                          ₹{ln.total.toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Totals Summary */}
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+              <div className="flex justify-between text-navy-600">
+                <span>Subtotal (Excl. Tax)</span>
+                <span className="font-mono">₹{selectedBill.subtotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between text-navy-600">
+                <span>Input GST Credit (9% CGST + 9% SGST)</span>
+                <span className="font-mono">₹{selectedBill.taxTotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between font-bold text-sm text-navy-900 pt-1.5 border-t border-slate-200">
+                <span>Grand Total</span>
+                <span className="font-mono">₹{selectedBill.grandTotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-xs text-red-600 pt-1">
+                <span>Outstanding Payable Due</span>
+                <span className="font-mono">₹{selectedBill.balanceDue.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-surface-border">
+              <Link
+                to={`${ROUTES.ACCOUNTING}/one-truth`}
+                className="text-xs text-brand-700 hover:underline flex items-center gap-1"
+              >
+                <span>View One-Truth Double-Entry</span>
+                <ExternalLink size={11} />
+              </Link>
+              <div className="flex items-center gap-2">
+                {selectedBill.balanceDue > 0 && !isContact && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleOpenPayment(selectedBill)}
+                    className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
+                  >
+                    <CreditCard size={13} className="mr-1.5" />
+                    Pay Bill
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={closeDetail} className="cursor-pointer">
+                  Close
+                </Button>
+              </div>
+            </div>
           </div>
-          <button onClick={() => setNotice(null)} className="text-brand-600 hover:text-brand-900">
-            <X size={14} />
-          </button>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-navy-400" size={14} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search bill #, vendor..."
-            className="w-full rounded-md border border-surface-border bg-white py-1.5 pl-8 pr-3 text-xs text-navy-800 placeholder-navy-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-navy-400" />
-          <span className="text-xs text-navy-400">Status:</span>
-          {['ALL', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                statusFilter === st
-                  ? 'bg-brand-700 text-white shadow-sm'
-                  : 'bg-white border border-surface-border text-navy-600 hover:bg-surface-secondary'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Bills Table */}
-      <div className="rounded-lg border border-surface-border bg-white shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Bill #</TableHead>
-              <TableHead>Vendor</TableHead>
-              <TableHead>Bill Date</TableHead>
-              <TableHead>Due Date</TableHead>
-              <TableHead className="text-right">Total Cost</TableHead>
-              <TableHead className="text-right">Paid</TableHead>
-              <TableHead className="text-right">Balance Due</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredBills.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-xs text-navy-400">
-                  No vendor bills found matching criteria.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredBills.map((b) => (
-                <TableRow key={b.id} className="hover:bg-surface-secondary/60">
-                  <TableCell className="font-mono text-xs font-semibold text-brand-700">
-                    {b.billNumber}
-                  </TableCell>
-                  <TableCell className="font-medium text-navy-900">{b.vendorName}</TableCell>
-                  <TableCell className="text-xs text-navy-500">{b.billDate}</TableCell>
-                  <TableCell className="text-xs text-navy-500">{b.dueDate}</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-navy-900">
-                    ₹{b.grandTotal.toLocaleString('en-IN')}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs text-status-success">
-                    ₹{b.amountPaid.toLocaleString('en-IN')}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs font-semibold text-status-danger">
-                    ₹{b.balanceDue.toLocaleString('en-IN')}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={getStatusBadgeVariant(b.status)}>{b.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedBill(b)}
-                        className="h-7 text-[11px] px-2"
-                      >
-                        View
-                      </Button>
-                      {b.balanceDue > 0 && (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => handleOpenPayment(b)}
-                          className="h-7 text-[11px] px-2 bg-brand-700 hover:bg-brand-800"
-                        >
-                          <CreditCard size={12} className="mr-1" />
-                          Pay Vendor
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Pay Vendor Modal */}
+      {/* ============================================================ */}
+      {/* REGISTER VENDOR PAYMENT MODAL                                */}
+      {/* ============================================================ */}
       {paymentModalOpen && activePaymentBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 p-4">
-          <div className="w-full max-w-md rounded-lg border border-surface-border bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <div>
                 <h3 className="text-base font-bold text-navy-900">Register Vendor Payment</h3>
-                <p className="text-xs text-navy-400">
-                  Bill: {activePaymentBill.billNumber} &bull; {activePaymentBill.vendorName}
-                </p>
+                <p className="text-xs text-text-muted">Settlement voucher for {activePaymentBill.billNumber}</p>
               </div>
-              <button
-                onClick={() => setPaymentModalOpen(false)}
-                className="rounded p-1 text-navy-400 hover:bg-surface-secondary"
-              >
+              <button onClick={() => setPaymentModalOpen(false)} className="text-text-muted hover:text-navy-900 cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleRegisterPayment} className="mt-4 space-y-4">
+            <form onSubmit={handleRegisterPayment} className="space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex justify-between text-navy-600 mb-1">
+                  <span>Vendor:</span>
+                  <span className="font-semibold text-navy-900">{activePaymentBill.vendorName}</span>
+                </div>
+                <div className="flex justify-between text-navy-600">
+                  <span>Payable Due:</span>
+                  <span className="font-mono font-bold text-red-600">
+                    ₹{activePaymentBill.balanceDue.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-navy-700 mb-1">
-                  Payment Amount (₹)
-                </label>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Disbursement Amount (₹) *</label>
                 <input
                   type="number"
-                  min="1"
+                  min={1}
                   max={activePaymentBill.balanceDue}
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono font-bold text-navy-900 focus:border-brand-500 focus:outline-none"
                   required
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
                 />
-                <span className="text-[11px] text-navy-400">
-                  Outstanding balance: ₹{activePaymentBill.balanceDue.toLocaleString('en-IN')}
-                </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-navy-700 mb-1">
-                  Disbursement Journal
-                </label>
-                <select
-                  value={paymentJournal}
-                  onChange={(e) => setPaymentJournal(e.target.value as 'BANK' | 'CASH')}
-                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-800 focus:border-brand-500 focus:outline-none"
-                >
-                  <option value="BANK">HDFC Bank Current Account (Bank Journal)</option>
-                  <option value="CASH">Cash Register Journal</option>
-                </select>
-              </div>
-
-              <div className="rounded-md border border-brand-200 bg-brand-50/50 p-3 text-xs space-y-1">
-                <span className="font-semibold text-brand-900 flex items-center gap-1">
-                  <ArrowRight size={12} /> Double-Entry Accounting Impact:
-                </span>
-                <div className="flex justify-between text-navy-600 font-mono text-[11px] pt-1">
-                  <span>Debit: 2001 Accounts Payable (Creditors)</span>
-                  <span>-₹{paymentAmount.toLocaleString('en-IN')}</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Disbursement Account</label>
+                  <select
+                    value={paymentJournal}
+                    onChange={(e) => setPaymentJournal(e.target.value as 'BANK' | 'CASH')}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                  >
+                    <option value="BANK">HDFC Bank Account</option>
+                    <option value="CASH">Cash Register</option>
+                  </select>
                 </div>
-                <div className="flex justify-between text-navy-600 font-mono text-[11px]">
-                  <span>Credit: {paymentJournal === 'BANK' ? '1002 HDFC Bank' : '1001 Cash'}</span>
-                  <span>-₹{paymentAmount.toLocaleString('en-IN')}</span>
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Payment Mode</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'HDFC Bank Transfer' | 'Cash Register' | 'UPI')}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                  >
+                    <option value="HDFC Bank Transfer">NEFT / Bank Transfer</option>
+                    <option value="UPI">UPI Digital Payment</option>
+                    <option value="Cash Register">Cash Voucher</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-[11px] text-emerald-900">
+                <span className="font-semibold">Double-Entry Impact:</span> Will debit Accounts Payable (reducing creditor liability) and credit Bank/Cash.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button type="button" variant="outline" size="sm" onClick={() => setPaymentModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" size="sm" className="bg-brand-700 hover:bg-brand-800">
-                  Confirm Vendor Payment
+                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                  Disburse & Post Voucher
                 </Button>
               </div>
             </form>
@@ -297,99 +643,153 @@ export function BillsPage() {
         </div>
       )}
 
-      {/* Bill Detail Modal */}
-      {selectedBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 p-4">
-          <div className="w-full max-w-lg rounded-lg border border-surface-border bg-white p-6 shadow-xl space-y-4">
+      {/* ============================================================ */}
+      {/* DIRECT VENDOR BILL CREATION MODAL                            */}
+      {/* ============================================================ */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
-              <div className="flex items-center gap-2">
-                <Receipt className="text-brand-600" size={20} />
-                <div>
-                  <h3 className="font-bold text-navy-900">{selectedBill.billNumber}</h3>
-                  <span className="text-[11px] text-navy-400">Vendor Bill &bull; {selectedBill.vendorName}</span>
-                </div>
+              <div>
+                <h3 className="text-base font-bold text-navy-900">Create Vendor Bill</h3>
+                <p className="text-xs text-text-muted">Direct bill logging for raw materials</p>
               </div>
-              <button onClick={() => setSelectedBill(null)} className="text-navy-400 hover:text-navy-600">
+              <button
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  if (location.pathname === ROUTES.BILLS_NEW) navigate(ROUTES.BILLS);
+                }}
+                className="text-text-muted hover:text-navy-900 cursor-pointer"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <form onSubmit={handleCreateDirectBill} className="space-y-3.5 text-xs">
               <div>
-                <span className="text-navy-400">Vendor:</span>
-                <p className="font-semibold text-navy-900 mt-0.5">{selectedBill.vendorName}</p>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Vendor / Supplier *</label>
+                <select
+                  value={newVendorId}
+                  onChange={(e) => setNewVendorId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  {contacts
+                    .filter((c) => c.type === 'VENDOR' || c.type === 'BOTH')
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.city})
+                      </option>
+                    ))}
+                </select>
               </div>
-              <div className="text-right">
-                <span className="text-navy-400">Status:</span>
-                <div className="mt-0.5">
-                  <Badge variant={getStatusBadgeVariant(selectedBill.status)}>{selectedBill.status}</Badge>
-                </div>
-              </div>
+
               <div>
-                <span className="text-navy-400">Bill Date:</span>
-                <p className="text-navy-700 mt-0.5">{selectedBill.billDate}</p>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Purchased Item *</label>
+                <select
+                  value={newProductId}
+                  onChange={(e) => setNewProductId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — Cost: ₹{p.purchasePrice.toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="text-right">
-                <span className="text-navy-400">Payment Due:</span>
-                <p className="text-navy-700 mt-0.5">{selectedBill.dueDate}</p>
-              </div>
-            </div>
 
-            <div className="border-t border-surface-border pt-3">
-              <span className="text-xs font-semibold text-navy-800 block mb-1.5">Materials & Components:</span>
-              {selectedBill.lines.map((l) => (
-                <div key={l.id} className="flex justify-between py-1 text-xs border-b border-surface-secondary">
-                  <span>{l.productName} &times; {l.quantity}</span>
-                  <span className="font-mono">₹{l.total.toLocaleString('en-IN')}</span>
-                </div>
-              ))}
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={newQuantity}
+                  onChange={(e) => setNewQuantity(Math.max(1, Number(e.target.value)))}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
+                />
+              </div>
 
-            <div className="rounded-md bg-surface-secondary p-3 text-xs space-y-1">
-              <div className="flex justify-between text-navy-500">
-                <span>Subtotal Cost:</span>
-                <span className="font-mono">₹{selectedBill.subtotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-navy-500">
-                <span>Input GST (18%):</span>
-                <span className="font-mono">₹{selectedBill.taxTotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between font-bold text-navy-900 border-t border-surface-border pt-1">
-                <span>Total Amount:</span>
-                <span className="font-mono text-brand-700">₹{selectedBill.grandTotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-status-success font-semibold">
-                <span>Disbursed to Date:</span>
-                <span className="font-mono">₹{selectedBill.amountPaid.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-status-danger font-semibold">
-                <span>Remaining Payable:</span>
-                <span className="font-mono">₹{selectedBill.balanceDue.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setSelectedBill(null)}>
-                Close
-              </Button>
-              {selectedBill.balanceDue > 0 && (
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button
-                  variant="primary"
+                  type="button"
+                  variant="outline"
                   size="sm"
                   onClick={() => {
-                    setSelectedBill(null);
-                    handleOpenPayment(selectedBill);
+                    setIsCreateModalOpen(false);
+                    if (location.pathname === ROUTES.BILLS_NEW) navigate(ROUTES.BILLS);
                   }}
-                  className="bg-brand-700 hover:bg-brand-800"
                 >
-                  <CreditCard size={13} className="mr-1.5" />
-                  Pay Vendor
+                  Cancel
                 </Button>
-              )}
+                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                  Generate & Post Bill
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* VENDOR BILL PRINT & PDF PREVIEW MODAL                        */}
+      {/* ============================================================ */}
+      {isPrintModalOpen && selectedBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="relative w-full max-w-3xl bg-white rounded-xl shadow-2xl p-6 my-8 space-y-4">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3 no-print">
+              <div className="flex items-center gap-2">
+                <Printer size={18} className="text-navy-700" />
+                <h3 className="font-bold text-navy-900 text-sm">Print / PDF Preview: {selectedBill.billNumber}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
+                >
+                  <Printer size={13} className="mr-1.5" />
+                  Print / Save PDF
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="text-text-muted hover:text-navy-900 p-1 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
+
+            <TaxInvoiceDocument
+              documentType="BILL"
+              documentNumber={selectedBill.billNumber}
+              date={selectedBill.billDate}
+              dueDate={selectedBill.dueDate}
+              partnerName={selectedBill.vendorName}
+              partnerAddress="Bangalore, Karnataka - 560001"
+              lines={selectedBill.lines.map((ln) => ({
+                id: ln.id,
+                name: ln.productName,
+                quantity: ln.quantity,
+                unitPrice: ln.unitPrice,
+                subtotal: ln.subtotal,
+                tax: ln.taxAmount,
+                total: ln.total,
+              }))}
+              subtotal={selectedBill.subtotal}
+              taxTotal={selectedBill.taxTotal}
+              grandTotal={selectedBill.grandTotal}
+              amountPaid={selectedBill.amountPaid}
+              balanceDue={selectedBill.balanceDue}
+              status={selectedBill.status}
+              onClose={() => setIsPrintModalOpen(false)}
+            />
           </div>
         </div>
       )}
     </div>
   );
 }
+
+export default BillsPage;

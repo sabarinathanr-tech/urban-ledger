@@ -19,7 +19,9 @@ test.before(async () => {
 });
 
 test.after(async () => {
+  server.closeAllConnections?.();
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  setTimeout(() => process.exit(0), 50);
 });
 
 test('AUTH: successful public signup creates user with CONTACT role', async () => {

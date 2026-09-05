@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/app/config';
-import type { DashboardData } from '../types';
+import { useERP } from '@/context/ERPContext';
+import type { DashboardData, RecentTransaction, BudgetHealthItem, BudgetStatus, TransactionStatus } from '../types';
 import { getDashboardSummary } from '../api';
+
 
 // Dashboard section components
 import { DashboardHeader } from '../components/DashboardHeader';
@@ -85,11 +87,102 @@ export function DashboardPage() {
   }
 
   const { data } = state;
+  const {
+    getDashboardMetricsData,
+    invoices,
+    bills,
+    payments,
+    salesOrders,
+    budgets,
+  } = useERP();
 
-  // Empty state check — no transactions and no metrics
-  const isEmpty =
-    data.recentTransactions.length === 0 &&
-    data.metrics.every((m) => m.amount === 0);
+  const liveMetrics = getDashboardMetricsData();
+
+  // Dynamically derive recent transactions from live ERP state
+  const liveRecentTxns: RecentTransaction[] = [
+    ...invoices.map((inv) => ({
+      id: inv.id,
+      reference: inv.invoiceNumber,
+      type: 'Customer Invoice' as const,
+      party: inv.customerName,
+      date: inv.issueDate,
+      amount: inv.grandTotal,
+      status: (inv.status === 'PAID' ? 'Paid' : inv.status === 'OVERDUE' ? 'Overdue' : 'Posted') as TransactionStatus,
+    })),
+    ...bills.map((b) => ({
+      id: b.id,
+      reference: b.billNumber,
+      type: 'Vendor Bill' as const,
+      party: b.vendorName,
+      date: b.billDate,
+      amount: b.grandTotal,
+      status: (b.status === 'PAID' ? 'Paid' : b.status === 'OVERDUE' ? 'Overdue' : 'Posted') as TransactionStatus,
+    })),
+    ...payments.map((p) => ({
+      id: p.id,
+      reference: p.paymentNumber,
+      type: 'Payment' as const,
+      party: p.contactName,
+      date: p.paymentDate,
+      amount: p.amount,
+      status: 'Completed' as const,
+    })),
+    ...salesOrders.map((so) => ({
+      id: so.id,
+      reference: so.orderNumber,
+      type: 'Sales Order' as const,
+      party: so.customerName,
+      date: so.orderDate,
+      amount: so.grandTotal,
+      status: (so.status === 'INVOICED' ? 'Posted' : 'Draft') as TransactionStatus,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
+
+  const mergedMetrics = data.metrics.map((m) => {
+    switch (m.id) {
+      case 'revenue':
+        return { ...m, amount: liveMetrics.revenue };
+      case 'expenses':
+        return { ...m, amount: liveMetrics.expenses };
+      case 'net-profit':
+        return { ...m, amount: liveMetrics.netProfit };
+      case 'cash-bank':
+        return { ...m, amount: liveMetrics.cashBank };
+      case 'receivables':
+        return { ...m, amount: liveMetrics.receivables };
+      case 'payables':
+        return { ...m, amount: liveMetrics.payables };
+      default:
+        return m;
+    }
+  });
+
+  const mergedReceivables = {
+    ...data.receivables,
+    totalOutstanding: liveMetrics.receivables,
+    openInvoices: liveMetrics.unpaidInvoicesCount,
+  };
+
+  const mergedPayables = {
+    ...data.payables,
+    totalOutstanding: liveMetrics.payables,
+    openBills: liveMetrics.unpaidBillsCount,
+  };
+
+  const mergedBudgets: BudgetHealthItem[] = budgets.map((b) => ({
+    id: b.id,
+    name: b.name,
+    planned: b.plannedAmount,
+    actual: b.actualAmount,
+    remaining: b.remainingAmount,
+    utilization: b.utilization,
+    status: (b.status === 'HEALTHY' ? 'on-track' : b.status === 'WARNING' ? 'warning' : 'over-budget') as BudgetStatus,
+  }));
+
+  // Empty state check — no transactions and all metrics zero
+  const hasTransactions = liveRecentTxns.length > 0 || data.recentTransactions.length > 0;
+  const hasNonZeroMetric = mergedMetrics.some((m) => m.amount !== 0);
+  const isEmpty = !hasTransactions && !hasNonZeroMetric;
 
   if (isEmpty) {
     return (
@@ -133,16 +226,16 @@ export function DashboardPage() {
       <QuickActions actions={data.quickActions} />
 
       {/* FIRST ROW: Financial KPI Cards */}
-      <FinancialSummary metrics={data.metrics} />
+      <FinancialSummary metrics={mergedMetrics} />
 
       {/* SECOND ROW: Revenue vs Expense Chart */}
       <RevenueExpenseChart data={data.revenueExpenseTrend} />
 
       {/* THIRD ROW: Budget Health + Receivables + Payables */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <BudgetHealthCard budgets={data.budgetHealth} />
-        <ReceivablesCard data={data.receivables} />
-        <PayablesCard data={data.payables} />
+        <BudgetHealthCard budgets={mergedBudgets.length > 0 ? mergedBudgets : data.budgetHealth} />
+        <ReceivablesCard data={mergedReceivables} />
+        <PayablesCard data={mergedPayables} />
       </div>
 
       {/* FOURTH ROW: Accounting Health + Recent Transactions */}
@@ -151,7 +244,7 @@ export function DashboardPage() {
           <AccountingHealthCard checks={data.accountingHealth} />
         </div>
         <div className="lg:col-span-3">
-          <RecentTransactions transactions={data.recentTransactions} />
+          <RecentTransactions transactions={liveRecentTxns.length > 0 ? liveRecentTxns : data.recentTransactions} />
         </div>
       </div>
 
@@ -160,3 +253,4 @@ export function DashboardPage() {
     </div>
   );
 }
+

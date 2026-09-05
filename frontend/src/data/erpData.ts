@@ -16,6 +16,11 @@ export interface ContactItem {
   city: string;
   state: string;
   pincode: string;
+  profileImage?: string;
+  portalUser?: {
+    email: string;
+    active: boolean;
+  };
   isActive: boolean;
   totalReceivable?: number;
   totalPayable?: number;
@@ -29,7 +34,15 @@ export interface ProductItem {
   purchasePrice: number;
   category: string;
   stock: number;
+  image?: string;
   isActive: boolean;
+}
+
+export interface AnalyticAccountItem {
+  id: string;
+  name: string;
+  type: 'INCOME' | 'EXPENSES';
+  description?: string;
 }
 
 export interface LineItem {
@@ -186,6 +199,11 @@ export const INITIAL_CONTACTS: ContactItem[] = [
     city: 'Mumbai',
     state: 'Maharashtra',
     pincode: '400001',
+    profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    portalUser: {
+      email: 'nimesh@gmail.com',
+      active: true,
+    },
     isActive: true,
     totalReceivable: 0,
   },
@@ -198,6 +216,11 @@ export const INITIAL_CONTACTS: ContactItem[] = [
     city: 'Bangalore',
     state: 'Karnataka',
     pincode: '560001',
+    profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    portalUser: {
+      email: 'azure@furniture.com',
+      active: true,
+    },
     isActive: true,
     totalPayable: 13040,
   },
@@ -210,6 +233,11 @@ export const INITIAL_CONTACTS: ContactItem[] = [
     city: 'Pune',
     state: 'Maharashtra',
     pincode: '411001',
+    profileImage: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    portalUser: {
+      email: 'contact@metrospaces.in',
+      active: true,
+    },
     isActive: true,
     totalReceivable: 42480,
   },
@@ -222,6 +250,7 @@ export const INITIAL_CONTACTS: ContactItem[] = [
     city: 'Chennai',
     state: 'Tamil Nadu',
     pincode: '600002',
+    profileImage: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
     isActive: true,
     totalPayable: 0,
     totalReceivable: 0,
@@ -240,6 +269,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     purchasePrice: 2800,
     category: 'Chairs & Seating',
     stock: 45,
+    image: 'https://images.unsplash.com/photo-1580481077198-c80753ff6377?w=300&auto=format&fit=crop&q=80',
     isActive: true,
   },
   {
@@ -250,6 +280,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     purchasePrice: 11500,
     category: 'Tables & Desks',
     stock: 12,
+    image: 'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=300&auto=format&fit=crop&q=80',
     isActive: true,
   },
   {
@@ -260,6 +291,7 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     purchasePrice: 7800,
     category: 'Tables & Desks',
     stock: 18,
+    image: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=300&auto=format&fit=crop&q=80',
     isActive: true,
   },
   {
@@ -707,4 +739,14 @@ export const INITIAL_BUDGETS: BudgetHealthItem[] = [
     utilization: 56.8,
     status: 'HEALTHY',
   },
+];
+
+// ==========================================
+// FINANCE: ANALYTIC ACCOUNTS (PS Page 4)
+// ==========================================
+export const INITIAL_ANALYTIC_ACCOUNTS: AnalyticAccountItem[] = [
+  { id: 'ana-1', name: 'Wood Procurement (Expenses)', type: 'EXPENSES', description: 'Raw timber, teak logs and veneers' },
+  { id: 'ana-2', name: 'Operations & Utilities (Expenses)', type: 'EXPENSES', description: 'Workshop power, tooling and machinery' },
+  { id: 'ana-3', name: 'Showroom Marketing (Expenses)', type: 'EXPENSES', description: 'Catalogues, expo stalls, and digital ads' },
+  { id: 'ana-4', name: 'Custom Design Studio (Income)', type: 'INCOME', description: 'Architectural custom consulting' },
 ];

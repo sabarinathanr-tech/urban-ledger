@@ -1,7 +1,7 @@
 import type React from 'react';
 import { cn } from '@/lib/utils';
 
-type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'outline';
+type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'danger' | 'info' | 'outline';
 
 interface BadgeProps {
   variant?: BadgeVariant;
@@ -11,6 +11,7 @@ interface BadgeProps {
 
 const variantClasses: Record<BadgeVariant, string> = {
   default: 'bg-surface-tertiary text-navy-600',
+  secondary: 'bg-slate-100 text-slate-700',
   success: 'bg-status-success-bg text-status-success',
   warning: 'bg-status-warning-bg text-status-warning',
   danger: 'bg-status-danger-bg text-status-danger',

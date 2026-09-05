@@ -7,10 +7,10 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(5000),
-  FRONTEND_URL: z.string().url().default('http://localhost:5173'),
-  JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters long'),
+  FRONTEND_URL: z.string().default('http://localhost:5173'),
+  JWT_SECRET: z.string().min(16).default('urban_ledger_secure_jwt_secret_key_2026_odoo'),
   JWT_EXPIRES_IN: z.string().default('1d'),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  DATABASE_URL: z.string().default('postgresql://postgres:postgres@localhost:5432/urban_ledger?schema=public'),
 });
 
 const parseEnv = () => {

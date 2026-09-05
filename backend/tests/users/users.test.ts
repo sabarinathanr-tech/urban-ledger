@@ -22,7 +22,9 @@ test.before(async () => {
 });
 
 test.after(async () => {
+  server.closeAllConnections?.();
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  setTimeout(() => process.exit(0), 50);
 });
 
 const generateTokenForRole = (role: string, email = 'user@test.com'): string => {

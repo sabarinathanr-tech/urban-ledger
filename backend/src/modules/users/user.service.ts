@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import { prisma, isDatabaseAvailable } from '../../config/db.js';
 import { ROLES, CONTACT_TYPES, ERROR_CODES, type Role, type UserStatus, type ContactType } from '../../config/constants.js';
-import { ConflictError } from '../../utils/errors.js';
+import { ConflictError, NotFoundError, BadRequestError, AppError } from '../../utils/errors.js';
 import type { CreateUserInput, ListUsersQuery } from './user.schema.js';
 import type { UserResponse } from './user.types.js';
 import { memoryUsers } from '../auth/auth.service.js';
@@ -203,6 +203,32 @@ export class UserService {
       total,
       params
     );
+  }
+  public async toggleUserStatus(id: string, currentUserId: string): Promise<UserResponse> {
+    if (id === currentUserId) {
+      throw new BadRequestError('Administrators cannot deactivate their own active account.');
+    }
+
+    if (isDatabaseAvailable()) {
+      try {
+        const user = await prisma.user.findUnique({ where: { id }, include: { contact: true } });
+        if (!user) throw new NotFoundError('User not found.');
+        const updated = await prisma.user.update({
+          where: { id },
+          data: { isActive: !user.isActive },
+          include: { contact: true },
+        });
+        return this.sanitizeUser(updated);
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+      }
+    }
+
+    const memUser = memoryUsers.get(id);
+    if (!memUser) throw new NotFoundError('User not found.');
+    memUser.status = memUser.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    memUser.updatedAt = new Date();
+    return this.sanitizeUser(memUser);
   }
 }
 

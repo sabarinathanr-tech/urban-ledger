@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,28 @@ interface RecentTransactionsProps {
 }
 
 export function RecentTransactions({ transactions }: RecentTransactionsProps) {
+  const navigate = useNavigate();
+
+  const handleNavigateToDocument = (txn: RecentTransaction) => {
+    const ref = txn.reference.toUpperCase();
+    const type = txn.type.toLowerCase();
+    if (ref.startsWith('INV') || type.includes('invoice')) {
+      navigate(`/invoices/${txn.id}`);
+    } else if (ref.startsWith('BILL') || type.includes('bill')) {
+      navigate(`/bills/${txn.id}`);
+    } else if (ref.startsWith('PAY') || type.includes('payment')) {
+      navigate(`/payments/${txn.id}`);
+    } else if (ref.startsWith('SO') || type.includes('sale')) {
+      navigate(`/sales/${txn.id}`);
+    } else if (ref.startsWith('PO') || type.includes('purchase')) {
+      navigate(`/purchases/${txn.id}`);
+    } else if (ref.startsWith('JE') || type.includes('journal')) {
+      navigate(ROUTES.ACCOUNTING_ENTRIES);
+    } else {
+      navigate(ROUTES.ACCOUNTING);
+    }
+  };
+
   if (transactions.length === 0) {
     return (
       <Card>
@@ -71,7 +93,9 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
               {transactions.map((txn) => (
                 <tr
                   key={txn.id}
+                  onClick={() => handleNavigateToDocument(txn)}
                   className="border-b border-surface-border last:border-0 transition-colors hover:bg-surface-secondary cursor-pointer"
+                  title={`View details for ${txn.reference}`}
                 >
                   <td className="px-5 py-3 font-medium text-navy-700 font-mono text-caption">
                     {txn.reference}
@@ -96,7 +120,12 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
         {/* Mobile card layout */}
         <div className="md:hidden divide-y divide-surface-border">
           {transactions.map((txn) => (
-            <div key={txn.id} className="px-5 py-3 space-y-1.5">
+            <div
+              key={txn.id}
+              onClick={() => handleNavigateToDocument(txn)}
+              className="px-5 py-3 space-y-1.5 cursor-pointer hover:bg-surface-secondary transition-colors"
+              title={`View details for ${txn.reference}`}
+            >
               <div className="flex items-center justify-between">
                 <span className="font-mono text-caption font-medium text-navy-700">
                   {txn.reference}
@@ -118,6 +147,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
             </div>
           ))}
         </div>
+
       </CardContent>
 
       <CardFooter className="md:hidden justify-center">

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
   Scale,
@@ -10,6 +11,7 @@ import {
   Search,
   Eye,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,22 +23,57 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import {
-  INITIAL_ACCOUNTS,
-  INITIAL_JOURNALS,
-  INITIAL_JOURNAL_ENTRIES,
-  type AccountItem,
-  type JournalEntry,
-} from '@/data/erpData';
+import { useERP } from '@/context/ERPContext';
+import { ROUTES } from '@/app/config';
+import type { AccountItem, JournalEntry } from '@/data/erpData';
+
+type TabType = 'COA' | 'JOURNALS' | 'ENTRIES' | 'LEDGER' | 'FLOW';
 
 export function AccountingPage() {
-  const [activeTab, setActiveTab] = useState<'COA' | 'JOURNALS' | 'ENTRIES' | 'LEDGER' | 'FLOW'>('COA');
-  const [accounts] = useState<AccountItem[]>(INITIAL_ACCOUNTS);
-  const [journalEntries] = useState<JournalEntry[]>(INITIAL_JOURNAL_ENTRIES);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { accounts, journals, journalEntries, resetDemoData } = useERP();
+
+  const [activeTab, setActiveTab] = useState<TabType>('COA');
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>('ALL');
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [selectedLedgerAccount, setSelectedLedgerAccount] = useState<string>('acc-1002');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Synchronize active tab with URL
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.includes('/chart-of-accounts') || path.includes('/accounts')) {
+      setActiveTab('COA');
+    } else if (path.includes('/journals')) {
+      setActiveTab('JOURNALS');
+    } else if (path.includes('/journal-entries') || path.includes('/entries')) {
+      setActiveTab('ENTRIES');
+    } else if (path.includes('/ledger')) {
+      setActiveTab('LEDGER');
+    }
+  }, [location.pathname]);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    switch (tab) {
+      case 'COA':
+        navigate(ROUTES.ACCOUNTING_COA);
+        break;
+      case 'JOURNALS':
+        navigate(ROUTES.ACCOUNTING_JOURNALS);
+        break;
+      case 'ENTRIES':
+        navigate(ROUTES.ACCOUNTING_ENTRIES);
+        break;
+      case 'LEDGER':
+        navigate(ROUTES.ACCOUNTING_LEDGER);
+        break;
+      default:
+        navigate(ROUTES.ACCOUNTING);
+        break;
+    }
+  };
 
   // Total debits & credits validation
   const totalDebits = journalEntries.reduce((acc, je) => acc + je.totalDebit, 0);
@@ -66,6 +103,20 @@ export function AccountingPage() {
     }
   };
 
+  // Build live ledger entries for selectedLedgerAccount
+  const ledgerEntries = journalEntries.flatMap((je) => {
+    const matchingLines = je.lines.filter((l) => l.accountId === selectedLedgerAccount);
+    return matchingLines.map((line) => ({
+      date: je.date,
+      entryNumber: je.entryNumber,
+      reference: je.reference,
+      debit: line.debit,
+      credit: line.credit,
+    }));
+  });
+
+  const targetAccount = accounts.find((a) => a.id === selectedLedgerAccount);
+
   return (
     <div className="mx-auto max-w-dashboard space-y-5 p-4 lg:p-6">
       {/* Header */}
@@ -84,14 +135,31 @@ export function AccountingPage() {
           </p>
         </div>
 
-        {/* System Double-Entry Balance Badge */}
-        <div className="flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-1.5 shadow-sm">
-          <Scale size={16} className={isSystemBalanced ? 'text-status-success' : 'text-status-danger'} />
-          <div className="text-xs">
-            <span className="text-navy-400">Ledger Balance: </span>
-            <span className={`font-bold ${isSystemBalanced ? 'text-status-success' : 'text-status-danger'}`}>
-              {isSystemBalanced ? 'BALANCED (Σ Dr = Σ Cr)' : 'UNBALANCED'}
-            </span>
+        <div className="flex items-center gap-2.5">
+          {/* Reset Demo Data Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetDemoData}
+            className="flex items-center gap-1.5 text-xs text-navy-600"
+            title="Reset ERP data to baseline state"
+          >
+            <RefreshCw size={13} />
+            <span>Reset Demo</span>
+          </Button>
+
+          {/* System Double-Entry Balance Badge */}
+          <div className="flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-1.5 shadow-sm">
+            <Scale size={16} className={isSystemBalanced ? 'text-status-success' : 'text-status-danger'} />
+            <div className="text-xs">
+              <span className="text-navy-400">Ledger Balance: </span>
+              <span className={`font-bold ${isSystemBalanced ? 'text-status-success' : 'text-status-danger'}`}>
+                {isSystemBalanced ? 'BALANCED (Σ Dr = Σ Cr)' : 'UNBALANCED'}
+              </span>
+              <span className="font-mono text-[11px] text-navy-400 ml-1">
+                (₹{totalDebits.toLocaleString('en-IN')})
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -101,13 +169,13 @@ export function AccountingPage() {
         {[
           { id: 'COA', label: 'Chart of Accounts', icon: <FileSpreadsheet size={15} /> },
           { id: 'JOURNALS', label: 'Journals', icon: <Layers size={15} /> },
-          { id: 'ENTRIES', label: 'Journal Entries', icon: <ListOrdered size={15} /> },
+          { id: 'ENTRIES', label: `Journal Entries (${journalEntries.length})`, icon: <ListOrdered size={15} /> },
           { id: 'LEDGER', label: 'General Ledger', icon: <BookOpen size={15} /> },
           { id: 'FLOW', label: 'Event → Accounting Truth Flow', icon: <ArrowRight size={15} /> },
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as 'COA' | 'JOURNALS' | 'ENTRIES' | 'LEDGER' | 'FLOW')}
+            onClick={() => handleTabChange(tab.id as TabType)}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
               activeTab === tab.id
                 ? 'bg-brand-700 text-white shadow-sm'
@@ -163,6 +231,7 @@ export function AccountingPage() {
                   <TableHead>Classification Type</TableHead>
                   <TableHead className="text-right">Balance</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -179,6 +248,19 @@ export function AccountingPage() {
                     <TableCell className="text-center">
                       <Badge variant="success">ACTIVE</Badge>
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedLedgerAccount(a.id);
+                          handleTabChange('LEDGER');
+                        }}
+                        className="h-7 text-[11px] px-2"
+                      >
+                        Ledger
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -192,7 +274,7 @@ export function AccountingPage() {
       {/* ──────────────────────────────────────────────────────── */}
       {activeTab === 'JOURNALS' && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {INITIAL_JOURNALS.map((j) => (
+          {journals.map((j) => (
             <div
               key={j.id}
               className="rounded-lg border border-surface-border bg-white p-4 shadow-sm space-y-2 hover:border-brand-300 transition"
@@ -207,8 +289,11 @@ export function AccountingPage() {
               <p className="text-xs text-navy-400">
                 {j.entriesCount} posted entries reconciled
               </p>
-              <div className="pt-2 border-t border-surface-border flex justify-between items-center text-[11px] text-brand-600 font-medium cursor-pointer hover:underline">
-                <span>View journal audit log</span>
+              <div
+                onClick={() => handleTabChange('ENTRIES')}
+                className="pt-2 border-t border-surface-border flex justify-between items-center text-[11px] text-brand-600 font-medium cursor-pointer hover:underline"
+              >
+                <span>View journal entries</span>
                 <ArrowRight size={12} />
               </div>
             </div>
@@ -237,7 +322,11 @@ export function AccountingPage() {
               </TableHeader>
               <TableBody>
                 {journalEntries.map((je) => (
-                  <TableRow key={je.id} className="hover:bg-surface-secondary/60">
+                  <TableRow
+                    key={je.id}
+                    onClick={() => setSelectedEntry(je)}
+                    className="cursor-pointer hover:bg-surface-secondary/60"
+                  >
                     <TableCell className="font-mono text-xs font-bold text-brand-700">
                       {je.entryNumber}
                     </TableCell>
@@ -255,7 +344,7 @@ export function AccountingPage() {
                         {je.isBalanced ? 'POSTED &bull; BALANCED' : 'UNBALANCED'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="outline"
                         size="sm"
@@ -279,7 +368,7 @@ export function AccountingPage() {
       {/* ──────────────────────────────────────────────────────── */}
       {activeTab === 'LEDGER' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <span className="text-xs font-semibold text-navy-700">Select General Ledger Account:</span>
             <select
               value={selectedLedgerAccount}
@@ -298,17 +387,16 @@ export function AccountingPage() {
             <div className="flex justify-between items-center border-b border-surface-border pb-3">
               <div>
                 <h3 className="font-bold text-navy-900 text-sm">
-                  {accounts.find((a) => a.id === selectedLedgerAccount)?.code} &bull;{' '}
-                  {accounts.find((a) => a.id === selectedLedgerAccount)?.name}
+                  {targetAccount?.code} &bull; {targetAccount?.name}
                 </h3>
                 <span className="text-[11px] text-navy-400">
-                  Account Type: {accounts.find((a) => a.id === selectedLedgerAccount)?.type}
+                  Account Type: {targetAccount?.type}
                 </span>
               </div>
               <div className="text-right">
                 <span className="text-[11px] text-navy-400">Current Ledger Balance</span>
                 <p className="text-base font-bold font-mono text-brand-700">
-                  ₹{accounts.find((a) => a.id === selectedLedgerAccount)?.balance.toLocaleString('en-IN')}
+                  ₹{targetAccount?.balance.toLocaleString('en-IN')}
                 </p>
               </div>
             </div>
@@ -317,38 +405,34 @@ export function AccountingPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Reference / Voucher</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>Voucher / Entry #</TableHead>
+                  <TableHead>Source Event Reference</TableHead>
                   <TableHead className="text-right">Debit</TableHead>
                   <TableHead className="text-right">Credit</TableHead>
-                  <TableHead className="text-right">Running Balance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow>
-                  <TableCell className="text-xs text-navy-500">2026-02-01</TableCell>
-                  <TableCell className="font-mono text-xs">OPENING-BAL</TableCell>
-                  <TableCell className="text-xs text-navy-700">Opening Balance forward</TableCell>
-                  <TableCell className="text-right font-mono text-xs">₹250,000</TableCell>
-                  <TableCell className="text-right font-mono text-xs">—</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold">₹250,000</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="text-xs text-navy-500">2026-02-20</TableCell>
-                  <TableCell className="font-mono text-xs text-brand-700">PAY-2026-001</TableCell>
-                  <TableCell className="text-xs text-navy-700">Nimesh Pathak Invoice Receipt</TableCell>
-                  <TableCell className="text-right font-mono text-xs text-status-success">+₹26,550</TableCell>
-                  <TableCell className="text-right font-mono text-xs">—</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold">₹276,550</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="text-xs text-navy-500">2026-02-24</TableCell>
-                  <TableCell className="font-mono text-xs text-brand-700">PAY-2026-002</TableCell>
-                  <TableCell className="text-xs text-navy-700">Azure Furniture Vendor Payout</TableCell>
-                  <TableCell className="text-right font-mono text-xs">—</TableCell>
-                  <TableCell className="text-right font-mono text-xs text-status-danger">-₹20,000</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-brand-700">₹256,550</TableCell>
-                </TableRow>
+                {ledgerEntries.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-6 text-center text-xs text-navy-400">
+                      No posted journal movements recorded for this account.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  ledgerEntries.map((le, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="text-xs text-navy-500">{le.date}</TableCell>
+                      <TableCell className="font-mono text-xs text-brand-700">{le.entryNumber}</TableCell>
+                      <TableCell className="text-xs text-navy-700">{le.reference}</TableCell>
+                      <TableCell className="text-right font-mono text-xs font-medium text-navy-900">
+                        {le.debit > 0 ? `₹${le.debit.toLocaleString('en-IN')}` : '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs font-medium text-navy-900">
+                        {le.credit > 0 ? `₹${le.credit.toLocaleString('en-IN')}` : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -552,3 +636,5 @@ export function AccountingPage() {
     </div>
   );
 }
+
+export default AccountingPage;

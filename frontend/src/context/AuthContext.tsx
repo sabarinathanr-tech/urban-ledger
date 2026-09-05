@@ -23,12 +23,22 @@ const STORAGE_TOKEN_KEY = 'urban_ledger_token';
 export const DEMO_ACCOUNTS: Record<string, { email: string; name: string; role: UserRole; contactType?: ContactType }> = {
   ADMIN: {
     email: 'admin@urbanledger.com',
-    name: 'Admin User (Urban Ledger)',
+    name: 'Rohith (Admin)',
+    role: 'ADMIN',
+  },
+  ADMIN_ALT: {
+    email: 'admin@urbanfurniture.com',
+    name: 'Rohith Admin',
     role: 'ADMIN',
   },
   ACCOUNTANT: {
     email: 'accountant@urbanledger.com',
     name: 'Mohith (Lead Accountant)',
+    role: 'ACCOUNTANT',
+  },
+  ACCOUNTANT_ALT: {
+    email: 'accountant@urbanfurniture.com',
+    name: 'Mohith Accountant',
     role: 'ACCOUNTANT',
   },
   CUSTOMER: {
@@ -37,9 +47,21 @@ export const DEMO_ACCOUNTS: Record<string, { email: string; name: string; role: 
     role: 'CONTACT',
     contactType: 'CUSTOMER',
   },
+  CUSTOMER_ALT: {
+    email: 'nimesh@pathak.com',
+    name: 'Nimesh Pathak',
+    role: 'CONTACT',
+    contactType: 'CUSTOMER',
+  },
   VENDOR: {
     email: 'azure@furniture.com',
     name: 'Azure Furniture (Vendor)',
+    role: 'CONTACT',
+    contactType: 'VENDOR',
+  },
+  VENDOR_ALT: {
+    email: 'orders@azurefurniture.com',
+    name: 'Azure Furniture',
     role: 'CONTACT',
     contactType: 'VENDOR',
   },
@@ -85,6 +107,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(true);
     const normalizedEmail = credentials.email.trim().toLowerCase();
 
+    let backendReached = false;
+    let backendError: string | null = null;
+
     // 1. Attempt connection to live backend API if reachable
     try {
       const response = await fetch('/api/auth/login', {
@@ -96,32 +121,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }),
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result?.data?.user && result?.data?.token) {
-          const apiUser: AuthUser = {
-            id: result.data.user.id,
-            fullName: result.data.user.name,
-            email: result.data.user.email,
-            role: result.data.user.role,
-            contactType: result.data.user.contact?.type,
-            isActive: result.data.user.status === 'ACTIVE' || result.data.user.isActive !== false,
-          };
-          saveSession(apiUser, result.data.token);
-          setIsLoading(false);
-          return apiUser;
-        }
+      backendReached = true;
+      const result = await response.json().catch(() => null);
+
+      if (response.ok && result?.data?.user && result?.data?.token) {
+        const apiUser: AuthUser = {
+          id: result.data.user.id,
+          fullName: result.data.user.name,
+          email: result.data.user.email,
+          role: result.data.user.role,
+          contactType: result.data.user.contact?.type,
+          isActive: result.data.user.status === 'ACTIVE' || result.data.user.isActive !== false,
+          contact: result.data.user.contact || null,
+        };
+        saveSession(apiUser, result.data.token);
+        setIsLoading(false);
+        return apiUser;
+      } else {
+        // The backend actively responded with an error (e.g. 401, 403, 400)
+        backendError = result?.message || result?.error?.message || `Authentication failed (${response.status})`;
       }
     } catch {
       // Backend not running or offline, proceed to seamless local fallback
+      backendReached = false;
     }
 
-    // 2. Fallback to demo credentials for evaluation without blocker
+    // Server-side authentication is authoritative when server is online
+    if (backendReached) {
+      setIsLoading(false);
+      throw new Error(backendError || 'Invalid email or password.');
+    }
+
+    // 2. Offline fallback ONLY for evaluation demo accounts when backend service is offline
     const matchedDemoKey = Object.keys(DEMO_ACCOUNTS).find(
       (k) => DEMO_ACCOUNTS[k].email.toLowerCase() === normalizedEmail
     );
 
     if (matchedDemoKey) {
+      // Verify valid demo password
+      const validPasswords = ['Password@123', 'Admin@12345', 'Accountant@12345', 'Contact@12345'];
+      if (!validPasswords.includes(credentials.password)) {
+        setIsLoading(false);
+        throw new Error('Invalid email or password.');
+      }
+
       const demoConfig = DEMO_ACCOUNTS[matchedDemoKey];
       const demoUser: AuthUser = {
         id: `usr_demo_${matchedDemoKey.toLowerCase()}`,
@@ -136,27 +179,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return demoUser;
     }
 
-    // 3. Fallback for any standard entered user email
-    if (credentials.email && credentials.password.length >= 6) {
-      const generalUser: AuthUser = {
-        id: `usr_${Date.now()}`,
-        fullName: credentials.email.split('@')[0],
-        email: credentials.email,
-        role: 'ADMIN', // Default to admin for evaluation flexibility
-        isActive: true,
-      };
-      saveSession(generalUser, `jwt_token_${Date.now()}`);
-      setIsLoading(false);
-      return generalUser;
-    }
-
     setIsLoading(false);
-    throw new Error('Invalid email or password. Minimum 6 characters required.');
+    throw new Error('Invalid email or password. Please verify your credentials or register an account.');
   }, []);
 
   const signup = useCallback(async (data: SignupData): Promise<AuthUser> => {
     setIsLoading(true);
     const normalizedEmail = data.email.trim().toLowerCase();
+
+    let backendReached = false;
+    let backendError: string | null = null;
 
     // 1. Attempt connection to live backend API
     try {
@@ -172,38 +204,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }),
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result?.data?.user && result?.data?.token) {
-          const apiUser: AuthUser = {
-            id: result.data.user.id,
-            fullName: result.data.user.name,
-            email: result.data.user.email,
-            role: 'CONTACT',
-            isActive: true,
-          };
-          saveSession(apiUser, result.data.token);
-          setIsLoading(false);
-          return apiUser;
-        }
+      backendReached = true;
+      const result = await response.json().catch(() => null);
+
+      if (response.ok && result?.data?.user && result?.data?.token) {
+        const apiUser: AuthUser = {
+          id: result.data.user.id,
+          fullName: result.data.user.name,
+          email: result.data.user.email,
+          role: 'CONTACT',
+          contactType: 'CUSTOMER',
+          isActive: true,
+        };
+        saveSession(apiUser, result.data.token);
+        setIsLoading(false);
+        return apiUser;
+      } else {
+        backendError = result?.message || result?.error?.message || `Registration failed (${response.status})`;
       }
     } catch {
-      // Backend offline, fallback to local creation
+      backendReached = false;
     }
 
-    // Local fallback: Public signup strictly grants CONTACT role
-    const newUser: AuthUser = {
-      id: `usr_signup_${Date.now()}`,
-      fullName: data.fullName.trim(),
-      email: normalizedEmail,
-      role: 'CONTACT',
-      contactType: 'CUSTOMER',
-      isActive: true,
-    };
+    if (backendReached) {
+      setIsLoading(false);
+      throw new Error(backendError || 'Registration failed.');
+    }
 
-    saveSession(newUser, `jwt_signup_token_${Date.now()}`);
     setIsLoading(false);
-    return newUser;
+    throw new Error('Backend server is not reachable. Please start the backend service to register an account.');
   }, []);
 
   const logout = useCallback(() => {
