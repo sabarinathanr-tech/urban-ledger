@@ -53,8 +53,12 @@ export function ContactsPage() {
     refreshERPData,
   } = useERP();
 
+  const queryParams = new URLSearchParams(location.search);
+  const typeParam = queryParams.get('type')?.toUpperCase();
+  const initialType = typeParam && ['CUSTOMER', 'VENDOR', 'BOTH'].includes(typeParam) ? typeParam : 'ALL';
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>(initialType);
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactItem | null>(null);
@@ -62,7 +66,9 @@ export function ContactsPage() {
 
   // New Contact Form
   const [name, setName] = useState('');
-  const [type, setType] = useState<'CUSTOMER' | 'VENDOR' | 'BOTH'>('CUSTOMER');
+  const [type, setType] = useState<'CUSTOMER' | 'VENDOR' | 'BOTH'>(
+    typeParam === 'VENDOR' ? 'VENDOR' : 'CUSTOMER'
+  );
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [city, setCity] = useState('');
@@ -70,6 +76,13 @@ export function ContactsPage() {
   const [pincode, setPincode] = useState('');
   const [profileImage, setProfileImage] = useState(PRESET_AVATARS[0]);
   const [enablePortalLogin, setEnablePortalLogin] = useState(true);
+
+  useEffect(() => {
+    if (typeParam && ['CUSTOMER', 'VENDOR', 'BOTH'].includes(typeParam)) {
+      setTypeFilter(typeParam);
+      setType(typeParam as 'CUSTOMER' | 'VENDOR' | 'BOTH');
+    }
+  }, [typeParam]);
 
   useEffect(() => {
     if (location.pathname === ROUTES.CONTACTS_NEW) {

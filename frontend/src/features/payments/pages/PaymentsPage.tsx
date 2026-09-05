@@ -46,12 +46,25 @@ export function PaymentsPage() {
 
   // New Payment Form
   const [paymentType, setPaymentType] = useState<'CUSTOMER_PAYMENT' | 'VENDOR_PAYMENT'>('CUSTOMER_PAYMENT');
-  const [contactId, setContactId] = useState('cnt-1');
+  const eligibleContacts = contacts.filter((c) =>
+    paymentType === 'CUSTOMER_PAYMENT'
+      ? c.type === 'CUSTOMER' || c.type === 'BOTH'
+      : c.type === 'VENDOR' || c.type === 'BOTH'
+  );
+  const [contactId, setContactId] = useState(eligibleContacts[0]?.id || contacts[0]?.id || '');
   const [amount, setAmount] = useState<number>(15000);
   const [journal, setJournal] = useState<'BANK' | 'CASH'>('BANK');
   const [method, setMethod] = useState<'HDFC Bank Transfer' | 'Cash Register' | 'UPI'>('HDFC Bank Transfer');
   const [docRef, setDocRef] = useState('INV-2026-002');
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!eligibleContacts.some((c) => c.id === contactId)) {
+      if (eligibleContacts[0]?.id || contacts[0]?.id) {
+        setContactId(eligibleContacts[0]?.id || contacts[0]?.id);
+      }
+    }
+  }, [paymentType, eligibleContacts, contactId, contacts]);
 
   useEffect(() => {
     if (location.pathname === ROUTES.PAYMENTS_NEW) {

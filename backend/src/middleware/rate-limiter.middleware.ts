@@ -9,7 +9,7 @@ interface RateLimitRecord {
 const rateLimitStore = new Map<string, RateLimitRecord>();
 
 // Cleanup stale records periodically
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, record] of rateLimitStore.entries()) {
     if (now > record.resetTime) {
@@ -17,6 +17,7 @@ setInterval(() => {
     }
   }
 }, 60000);
+cleanupInterval.unref();
 
 /**
  * Lightweight in-memory rate limiter for auth / sensitive endpoints

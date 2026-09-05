@@ -56,9 +56,22 @@ export function InvoicesPage() {
 
   // New Invoice Form state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newCustomerId, setNewCustomerId] = useState('cnt-1');
-  const [newProductId, setNewProductId] = useState('prd-1');
+  const eligibleCustomers = contacts.filter((c) => c.type === 'CUSTOMER' || c.type === 'BOTH');
+  const [newCustomerId, setNewCustomerId] = useState(eligibleCustomers[0]?.id || contacts[0]?.id || '');
+  const [newProductId, setNewProductId] = useState(products[0]?.id || '');
   const [newQuantity, setNewQuantity] = useState(1);
+
+  useEffect(() => {
+    if (!newCustomerId && (eligibleCustomers[0]?.id || contacts[0]?.id)) {
+      setNewCustomerId(eligibleCustomers[0]?.id || contacts[0]?.id);
+    }
+  }, [newCustomerId, eligibleCustomers, contacts]);
+
+  useEffect(() => {
+    if (!newProductId && products[0]?.id) {
+      setNewProductId(products[0]?.id);
+    }
+  }, [newProductId, products]);
 
   // Route triggers
   useEffect(() => {

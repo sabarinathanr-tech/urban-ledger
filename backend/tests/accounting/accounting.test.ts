@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../../src/app.js';
+import { prisma } from '../../src/config/db.js';
 import { env } from '../../src/config/env.js';
 import { ROLES } from '../../src/config/constants.js';
 
@@ -24,6 +25,7 @@ test.before(async () => {
 test.after(async () => {
   server.closeAllConnections?.();
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  await prisma.$disconnect().catch(() => {});
 });
 
 const generateTokenForRole = (role: string, email = 'staff@urbanledger.com'): string => {

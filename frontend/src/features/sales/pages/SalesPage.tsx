@@ -44,11 +44,24 @@ export function SalesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
 
-  // New Order Form State
-  const [customerId, setCustomerId] = useState('cnt-1');
-  const [productId, setProductId] = useState('prd-1');
+  // Eligible customers (CUSTOMER or BOTH)
+  const eligibleCustomers = contacts.filter((c) => c.type === 'CUSTOMER' || c.type === 'BOTH');
+  const [customerId, setCustomerId] = useState(eligibleCustomers[0]?.id || contacts[0]?.id || '');
+  const [productId, setProductId] = useState(products[0]?.id || '');
   const [quantity, setQuantity] = useState(2);
   const [orderNotice, setOrderNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!customerId && (eligibleCustomers[0]?.id || contacts[0]?.id)) {
+      setCustomerId(eligibleCustomers[0]?.id || contacts[0]?.id);
+    }
+  }, [customerId, eligibleCustomers, contacts]);
+
+  useEffect(() => {
+    if (!productId && products[0]?.id) {
+      setProductId(products[0]?.id);
+    }
+  }, [productId, products]);
 
   // Check route triggers (/sales/new or /sales/:id)
   useEffect(() => {

@@ -20,6 +20,24 @@ export class BudgetController {
       next(err);
     }
   }
+
+  public async listAnalyticAccounts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const accounts = await budgetService.listAnalyticAccounts();
+      sendSuccess(res, 'Analytic accounts retrieved successfully', accounts);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public async createAnalyticAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const account = await budgetService.createAnalyticAccount(req.body);
+      sendSuccess(res, 'Analytic account created successfully', account, 201);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const budgetController = new BudgetController();

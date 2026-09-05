@@ -44,11 +44,24 @@ export function PurchasesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
 
-  // Form State
-  const [vendorId, setVendorId] = useState('cnt-2');
-  const [productId, setProductId] = useState('prd-1');
+  // Eligible vendors (VENDOR or BOTH)
+  const eligibleVendors = contacts.filter((c) => c.type === 'VENDOR' || c.type === 'BOTH');
+  const [vendorId, setVendorId] = useState(eligibleVendors[0]?.id || contacts[0]?.id || '');
+  const [productId, setProductId] = useState(products[0]?.id || '');
   const [quantity, setQuantity] = useState(10);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vendorId && (eligibleVendors[0]?.id || contacts[0]?.id)) {
+      setVendorId(eligibleVendors[0]?.id || contacts[0]?.id);
+    }
+  }, [vendorId, eligibleVendors, contacts]);
+
+  useEffect(() => {
+    if (!productId && products[0]?.id) {
+      setProductId(products[0]?.id);
+    }
+  }, [productId, products]);
 
   useEffect(() => {
     if (location.pathname === ROUTES.PURCHASES_NEW) {

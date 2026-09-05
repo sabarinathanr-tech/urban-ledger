@@ -39,6 +39,7 @@ router.use('/bills', billRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/accounting', accountingRoutes);
 router.use('/budgets', budgetRoutes);
+router.use('/budgeting/budgets', budgetRoutes);
 router.use('/reports', reportRoutes);
 
 export default router;

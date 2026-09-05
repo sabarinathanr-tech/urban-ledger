@@ -17,7 +17,25 @@ export interface BudgetRecord {
   responsibleUser: string;
 }
 
+export interface AnalyticAccountRecord {
+  id: string;
+  name: string;
+  type: 'INCOME' | 'EXPENSES';
+  description?: string;
+}
+
 const memoryBudgets = new Map<string, BudgetRecord>();
+const memoryAnalyticAccounts = new Map<string, AnalyticAccountRecord>();
+
+const initialAnalyticAccounts: AnalyticAccountRecord[] = [
+  { id: 'ana-1', name: 'Wood Procurement (Expenses)', type: 'EXPENSES', description: 'Raw material procurement for furniture manufacture' },
+  { id: 'ana-2', name: 'Operations & Utilities (Expenses)', type: 'EXPENSES', description: 'Factory operations, power, and workshop maintenance' },
+  { id: 'ana-3', name: 'Showroom Marketing (Expenses)', type: 'EXPENSES', description: 'Urban showroom promotions and online reach' },
+  { id: 'ana-4', name: 'Custom Furniture Installations (Income)', type: 'INCOME', description: 'High-end custom interior installation revenue' },
+  { id: 'ana-5', name: 'Retail Store Sales (Income)', type: 'INCOME', description: 'Showroom cash & direct point-of-sale customer revenue' },
+];
+
+initialAnalyticAccounts.forEach((a) => memoryAnalyticAccounts.set(a.id, a));
 
 const initialBudgets: BudgetRecord[] = [
   {
@@ -193,7 +211,70 @@ export class BudgetService {
     memoryBudgets.set(id, newBudget);
     return newBudget;
   }
+
+  public async listAnalyticAccounts(): Promise<AnalyticAccountRecord[]> {
+    if (isDatabaseAvailable()) {
+      try {
+        const accounts = await prisma.analyticAccount.findMany({
+          orderBy: { name: 'asc' },
+        });
+        if (accounts.length > 0) {
+          return accounts.map((a) => ({
+            id: a.id,
+            name: a.name,
+            type: a.type as 'INCOME' | 'EXPENSES',
+          }));
+        }
+      } catch (err) {
+        logger.warn('Failed to query analytic accounts from Prisma, using fallback', err);
+      }
+    }
+    return Array.from(memoryAnalyticAccounts.values());
+  }
+
+  public async createAnalyticAccount(input: {
+    name: string;
+    type?: 'INCOME' | 'EXPENSES';
+    description?: string;
+  }): Promise<AnalyticAccountRecord> {
+    if (!input.name || !input.name.trim()) {
+      throw new BadRequestError('Analytic account name is required');
+    }
+    const name = input.name.trim();
+    const type = input.type === 'INCOME' ? 'INCOME' : 'EXPENSES';
+    const id = `ana_${Date.now()}`;
+
+    if (isDatabaseAvailable()) {
+      try {
+        const created = await prisma.analyticAccount.create({
+          data: {
+            name,
+            type,
+          },
+        });
+        const rec: AnalyticAccountRecord = {
+          id: created.id,
+          name: created.name,
+          type: created.type as 'INCOME' | 'EXPENSES',
+          description: input.description,
+        };
+        memoryAnalyticAccounts.set(created.id, rec);
+        return rec;
+      } catch (err) {
+        logger.warn('Failed to persist analytic account to Prisma, using memory fallback', err);
+      }
+    }
+
+    const rec: AnalyticAccountRecord = {
+      id,
+      name,
+      type,
+      description: input.description,
+    };
+    memoryAnalyticAccounts.set(id, rec);
+    return rec;
+  }
 }
 
 export const budgetService = new BudgetService();
-export { memoryBudgets };
+export { memoryBudgets, memoryAnalyticAccounts };

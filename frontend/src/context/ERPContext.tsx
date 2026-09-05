@@ -214,6 +214,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         journalsRes,
         journalEntriesRes,
         budgetsRes,
+        analyticAccountsRes,
       ] = await Promise.allSettled([
         apiClient.get('/products?limit=1000'),
         apiClient.get('/contacts?limit=1000'),
@@ -225,7 +226,8 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         apiClient.get('/accounting/chart-of-accounts'),
         apiClient.get('/accounting/journals'),
         apiClient.get('/accounting/journal-entries'),
-        apiClient.get('/budgeting/budgets'),
+        apiClient.get('/budgets'),
+        apiClient.get('/budgets/analytic-accounts'),
       ]);
 
       if (productsRes.status === 'fulfilled' && productsRes.value.data?.data?.items?.length) {
@@ -520,6 +522,21 @@ export function ERPProvider({ children }: { children: ReactNode }) {
             remainingAmount: Number(b.remainingAmount || 0),
             utilization: Number(b.utilization || 0),
             status: b.status || 'HEALTHY',
+          }))
+        );
+      }
+
+      if (
+        analyticAccountsRes.status === 'fulfilled' &&
+        Array.isArray(analyticAccountsRes.value.data?.data) &&
+        analyticAccountsRes.value.data.data.length > 0
+      ) {
+        setAnalyticAccounts(
+          analyticAccountsRes.value.data.data.map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            type: a.type || 'EXPENSES',
+            description: a.description,
           }))
         );
       }
@@ -1425,8 +1442,20 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       id: `ana-${Date.now()}`,
     };
     setAnalyticAccounts((prev) => [newAcc, ...prev]);
+
+    apiClient
+      .post('/budgets/analytic-accounts', {
+        name: acc.name,
+        type: acc.type,
+        description: acc.description,
+      })
+      .catch((e) => console.warn('Sync analytic account error:', e))
+      .finally(() => {
+        setTimeout(refreshFromBackend, 300);
+      });
+
     return newAcc;
-  }, []);
+  }, [refreshFromBackend]);
 
   const addProduct = useCallback((p: Omit<ProductItem, 'id' | 'isActive'>): ProductItem => {
     const newP: ProductItem = {

@@ -56,9 +56,22 @@ export function BillsPage() {
 
   // New Bill Form
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newVendorId, setNewVendorId] = useState('cnt-2');
-  const [newProductId, setNewProductId] = useState('prd-1');
+  const eligibleVendors = contacts.filter((c) => c.type === 'VENDOR' || c.type === 'BOTH');
+  const [newVendorId, setNewVendorId] = useState(eligibleVendors[0]?.id || contacts[0]?.id || '');
+  const [newProductId, setNewProductId] = useState(products[0]?.id || '');
   const [newQuantity, setNewQuantity] = useState(5);
+
+  useEffect(() => {
+    if (!newVendorId && (eligibleVendors[0]?.id || contacts[0]?.id)) {
+      setNewVendorId(eligibleVendors[0]?.id || contacts[0]?.id);
+    }
+  }, [newVendorId, eligibleVendors, contacts]);
+
+  useEffect(() => {
+    if (!newProductId && products[0]?.id) {
+      setNewProductId(products[0]?.id);
+    }
+  }, [newProductId, products]);
 
   useEffect(() => {
     if (location.pathname === ROUTES.BILLS_NEW) {
