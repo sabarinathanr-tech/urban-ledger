@@ -43,3 +43,4 @@ dev.db
 # Testing / Coverage
 coverage/
 .nyc_output/
+*.tsbuildinfo
