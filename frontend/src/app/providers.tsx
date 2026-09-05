@@ -1,4 +1,5 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { AuthProvider } from '@/context/AuthContext';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -6,8 +7,8 @@ interface ProvidersProps {
 
 /**
  * Application-wide providers wrapper.
- * Add context providers here (auth, theme, query client, etc.)
+ * Provides central authentication context to the route tree.
  */
 export function Providers({ children }: ProvidersProps) {
-  return <>{children}</>;
+  return <AuthProvider>{children}</AuthProvider>;
 }

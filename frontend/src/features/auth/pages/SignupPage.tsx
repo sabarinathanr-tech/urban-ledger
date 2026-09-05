@@ -1,10 +1,11 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { User, Mail, Phone, Loader2 } from 'lucide-react';
 import { signupSchema, type SignupFormValues } from '../schemas/signup.schema';
-import { signupUser } from '../api';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/app/config';
 import type { ApiStatusState } from '../types';
 import { AuthCard } from '../components/AuthCard';
 import { AuthHeader } from '../components/AuthHeader';
@@ -15,6 +16,8 @@ import { AuthBanner } from '../components/AuthBanner';
 import { AuthFooter } from '../components/AuthFooter';
 
 export const SignupPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { signup } = useAuth();
   const [apiStatus, setApiStatus] = useState<ApiStatusState>({
     type: 'idle',
     message: '',
@@ -44,7 +47,7 @@ export const SignupPage: React.FC = () => {
     setApiStatus({ type: 'idle', message: '' });
 
     try {
-      const response = await signupUser({
+      await signup({
         fullName: data.fullName,
         email: data.email,
         mobileNumber: data.mobileNumber,
@@ -54,11 +57,7 @@ export const SignupPage: React.FC = () => {
         role: data.role,
       });
 
-      setApiStatus({
-        type: 'notice',
-        message: 'Registration Validated Successfully',
-        details: `${response.message} Account setup for: ${data.fullName} (${data.email}, ${data.mobileNumber}). Default role: Contact.`,
-      });
+      navigate(ROUTES.DASHBOARD, { replace: true });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Registration error.';
       setApiStatus({

@@ -1,55 +1,94 @@
-﻿import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { AppLayout } from '@/layouts/AppLayout';
 import { AuthLayout } from '@/layouts/AuthLayout';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { PublicOnlyRoute } from '@/components/auth/PublicOnlyRoute';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { SignupPage } from '@/features/auth/pages/SignupPage';
 import { CreateUserPage } from '@/features/auth/pages/CreateUserPage';
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
+import { SalesPage } from '@/features/sales/pages/SalesPage';
+import { PurchasesPage } from '@/features/purchases/pages/PurchasesPage';
+import { InvoicesPage } from '@/features/invoices/pages/InvoicesPage';
+import { BillsPage } from '@/features/bills/pages/BillsPage';
+import { PaymentsPage } from '@/features/payments/pages/PaymentsPage';
+import { ContactsPage } from '@/features/contacts/pages/ContactsPage';
+import { ProductsPage } from '@/features/products/pages/ProductsPage';
+import { AccountingPage } from '@/features/accounting/pages/AccountingPage';
+import { ReportsPage } from '@/features/reports/pages/ReportsPage';
 import { ROUTES } from '@/app/config';
 
 /**
- * Application route configuration.
- *
- * OWNERSHIP:
- * - /dashboard routes → Rugenthra (DashboardPage wrapped in AppLayout)
- * - /login, /signup, /create-user → Sabari (Auth pages wrapped in AuthLayout)
+ * Intelligent index redirect:
+ * Unauthenticated users go to /login, authenticated users go to /dashboard.
  */
+function IndexRedirect() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-surface-secondary">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  return <Navigate to={isAuthenticated ? ROUTES.DASHBOARD : ROUTES.LOGIN} replace />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
-      {/* ── Dashboard (Rugenthra) ────────────────────────── */}
-      <Route element={<AppLayout />}>
-        <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-      </Route>
+      {/* ── Root Index Redirect ─────────────────────────────── */}
+      <Route path="/" element={<IndexRedirect />} />
 
-      {/* ── Auth Routes (Sabari) ─────────────────────────── */}
-      <Route element={<AuthLayout />}>
+      {/* ── Public Auth Routes ──────────────────────────────── */}
+      <Route
+        element={
+          <PublicOnlyRoute>
+            <AuthLayout />
+          </PublicOnlyRoute>
+        }
+      >
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
         <Route path={ROUTES.SIGNUP} element={<SignupPage />} />
+      </Route>
+
+      {/* ── Internal User Provisioning (Admin) ─────────────── */}
+      <Route element={<AuthLayout />}>
         <Route path={ROUTES.CREATE_USER} element={<CreateUserPage />} />
       </Route>
 
-      {/* ── Default Redirect ─────────────────────────────── */}
-      <Route path="/" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
-
-      {/* ── 404 Catch-all ────────────────────────────────── */}
+      {/* ── Protected ERP Application Shell ─────────────────── */}
       <Route
-        path="*"
         element={
-          <div className="flex min-h-screen items-center justify-center bg-surface-secondary">
-            <div className="text-center">
-              <h1 className="text-display text-navy-900">404</h1>
-              <p className="mt-2 text-body text-navy-400">Page not found</p>
-              <a
-                href={ROUTES.DASHBOARD}
-                className="mt-4 inline-block text-body font-medium text-brand-600 hover:text-brand-700"
-              >
-                Go to Dashboard
-              </a>
-            </div>
-          </div>
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
         }
-      />
+      >
+        {/* Main Dashboard */}
+        <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+
+        {/* Transactions Modules */}
+        <Route path={ROUTES.SALES} element={<SalesPage />} />
+        <Route path={ROUTES.PURCHASES} element={<PurchasesPage />} />
+        <Route path={ROUTES.INVOICES} element={<InvoicesPage />} />
+        <Route path={ROUTES.BILLS} element={<BillsPage />} />
+        <Route path={ROUTES.PAYMENTS} element={<PaymentsPage />} />
+
+        {/* Master Data */}
+        <Route path={ROUTES.CONTACTS} element={<ContactsPage />} />
+        <Route path={ROUTES.PRODUCTS} element={<ProductsPage />} />
+
+        {/* Finance & Accounting */}
+        <Route path={ROUTES.ACCOUNTING} element={<AccountingPage />} />
+        <Route path={ROUTES.REPORTS} element={<ReportsPage />} />
+      </Route>
+
+      {/* ── 404 Catch-all ─────────────────────────────────── */}
+      <Route path="*" element={<IndexRedirect />} />
     </Routes>
   );
 }
