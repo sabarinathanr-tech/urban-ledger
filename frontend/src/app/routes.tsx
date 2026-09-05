@@ -18,6 +18,7 @@ import { ProductsPage } from '@/features/products/pages/ProductsPage';
 import { AccountingPage } from '@/features/accounting/pages/AccountingPage';
 import { BudgetsPage } from '@/features/budgeting/pages/BudgetsPage';
 import { ReportsPage } from '@/features/reports/pages/ReportsPage';
+import { SettingsPage } from '@/features/settings/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { ROUTES } from '@/app/config';
 
@@ -101,13 +102,16 @@ export function AppRoutes() {
         {/* Finance & Accounting */}
         <Route path={ROUTES.ACCOUNTING} element={<AccountingPage />} />
         <Route path={ROUTES.ACCOUNTING_COA} element={<AccountingPage />} />
+        <Route path={ROUTES.ACCOUNTING_ACCOUNTS} element={<AccountingPage />} />
         <Route path={ROUTES.ACCOUNTING_JOURNALS} element={<AccountingPage />} />
         <Route path={ROUTES.ACCOUNTING_ENTRIES} element={<AccountingPage />} />
+        <Route path={ROUTES.ACCOUNTING_ENTRIES_SHORT} element={<AccountingPage />} />
         <Route path={ROUTES.ACCOUNTING_LEDGER} element={<AccountingPage />} />
         <Route path={ROUTES.ACCOUNTING_ONE_TRUTH} element={<AccountingPage />} />
 
-        {/* Budgets */}
+        {/* Budgets & Analytic Accounts */}
         <Route path={ROUTES.BUDGETS} element={<BudgetsPage />} />
+        <Route path={ROUTES.BUDGETS_ANALYTIC} element={<BudgetsPage />} />
 
         {/* Reports */}
         <Route path={ROUTES.REPORTS} element={<ReportsPage />} />
@@ -115,6 +119,9 @@ export function AppRoutes() {
         <Route path={ROUTES.REPORT_BALANCE_SHEET} element={<ReportsPage />} />
         <Route path={ROUTES.REPORT_BUDGET} element={<ReportsPage />} />
         <Route path={ROUTES.REPORT_STOCK} element={<ReportsPage />} />
+
+        {/* Configuration: Settings */}
+        <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 
         {/* User Provisioning (Admin only) */}
         <Route

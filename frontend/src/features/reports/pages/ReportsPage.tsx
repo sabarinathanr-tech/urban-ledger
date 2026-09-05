@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useERP } from '@/context/ERPContext';
 import { ROUTES } from '@/app/config';
+import { Breadcrumb } from '@/components/layout/Breadcrumb';
 
 type ReportType = 'PL' | 'BS' | 'BUDGET' | 'STOCK';
 
@@ -105,6 +106,9 @@ export function ReportsPage() {
 
   return (
     <div className="mx-auto max-w-dashboard space-y-5 p-4 lg:p-6">
+      {/* Breadcrumb */}
+      <Breadcrumb section="Reporting" />
+
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-surface-border pb-4">
         <div>

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Plus,
   CheckCircle2,
@@ -24,9 +25,22 @@ import {
 } from '@/components/ui/table';
 
 export function BudgetsPage() {
+  const location = useLocation();
   const { budgets, addBudget, analyticAccounts, addAnalyticAccount, refreshERPData } = useERP();
 
-  const [activeTab, setActiveTab] = useState<'budgets' | 'analytics'>('budgets');
+  const isAnalyticRoute = location.pathname.includes('analytic');
+  const [activeTab, setActiveTab] = useState<'budgets' | 'analytics'>(
+    isAnalyticRoute ? 'analytics' : 'budgets'
+  );
+
+  useEffect(() => {
+    if (location.pathname.includes('analytic')) {
+      setActiveTab('analytics');
+    } else {
+      setActiveTab('budgets');
+    }
+  }, [location.pathname]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);

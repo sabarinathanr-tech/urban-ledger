@@ -44,8 +44,10 @@ export const ROUTES = {
   // Accounting & Subroutes
   ACCOUNTING: '/accounting',
   ACCOUNTING_COA: '/accounting/chart-of-accounts',
+  ACCOUNTING_ACCOUNTS: '/accounting/accounts',
   ACCOUNTING_JOURNALS: '/accounting/journals',
   ACCOUNTING_ENTRIES: '/accounting/journal-entries',
+  ACCOUNTING_ENTRIES_SHORT: '/accounting/entries',
   ACCOUNTING_LEDGER: '/accounting/ledger',
   ACCOUNTING_ONE_TRUTH: '/accounting/one-truth',
   JOURNAL_ENTRIES: '/accounting/journal-entries',
@@ -53,6 +55,10 @@ export const ROUTES = {
 
   // Budgets
   BUDGETS: '/budgets',
+  BUDGETS_ANALYTIC: '/budgets/analytic-accounts',
+
+  // Settings
+  SETTINGS: '/settings',
 
   // Reports
   REPORTS: '/reports',

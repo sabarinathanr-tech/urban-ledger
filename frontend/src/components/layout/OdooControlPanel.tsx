@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Breadcrumb } from '@/components/layout/Breadcrumb';
 
 export type ViewMode = 'list' | 'kanban';
 
@@ -33,6 +34,9 @@ interface OdooControlPanelProps {
   extraActions?: React.ReactNode;
   itemCount?: number;
   onRefresh?: () => void;
+  hideBreadcrumb?: boolean;
+  breadcrumbSection?: string;
+  breadcrumbPage?: string;
 }
 
 export function OdooControlPanel({
@@ -51,44 +55,56 @@ export function OdooControlPanel({
   extraActions,
   itemCount,
   onRefresh,
+  hideBreadcrumb = false,
+  breadcrumbSection,
+  breadcrumbPage,
 }: OdooControlPanelProps) {
   return (
     <div className="bg-white border-b border-surface-border sticky top-0 z-20 shadow-2xs">
-      <div className="px-4 sm:px-6 py-2.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="px-4 sm:px-6 pt-2 pb-2.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         {/* Left Section: Breadcrumb / Title & New Action */}
-        <div className="flex items-center gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-navy-900 leading-tight">{title}</h1>
-              {itemCount !== undefined && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                  {itemCount}
-                </span>
-              )}
+        <div className="space-y-1">
+          {!hideBreadcrumb && (
+            <Breadcrumb
+              section={breadcrumbSection}
+              currentPage={breadcrumbPage || title}
+              className="pb-0.5"
+            />
+          )}
+          <div className="flex items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold text-navy-900 leading-tight">{title}</h1>
+                {itemCount !== undefined && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                    {itemCount}
+                  </span>
+                )}
+              </div>
+              {subtitle && <p className="text-xs text-text-muted">{subtitle}</p>}
             </div>
-            {subtitle && <p className="text-xs text-text-muted">{subtitle}</p>}
+
+            {onNewClick && (
+              <Button
+                onClick={onNewClick}
+                size="sm"
+                className="bg-navy-900 hover:bg-navy-800 text-white font-medium text-xs px-3 py-1.5 h-8 gap-1.5 rounded-md shadow-xs transition-all cursor-pointer"
+              >
+                <Plus size={15} />
+                <span>{newButtonLabel}</span>
+              </Button>
+            )}
+
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                title="Refresh"
+                className="p-1.5 text-text-muted hover:text-navy-900 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+              >
+                <RefreshCw size={14} />
+              </button>
+            )}
           </div>
-
-          {onNewClick && (
-            <Button
-              onClick={onNewClick}
-              size="sm"
-              className="bg-navy-900 hover:bg-navy-800 text-white font-medium text-xs px-3 py-1.5 h-8 gap-1.5 rounded-md shadow-xs transition-all cursor-pointer"
-            >
-              <Plus size={15} />
-              <span>{newButtonLabel}</span>
-            </Button>
-          )}
-
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              title="Refresh"
-              className="p-1.5 text-text-muted hover:text-navy-900 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-            >
-              <RefreshCw size={14} />
-            </button>
-          )}
         </div>
 
         {/* Center & Right Section: Search, Filters, Extra Actions, View Switcher */}
@@ -171,3 +187,5 @@ export function OdooControlPanel({
     </div>
   );
 }
+
+export { OdooControlPanel as ERPControlPanel };

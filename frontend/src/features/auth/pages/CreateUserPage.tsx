@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/app/config';
+import { Breadcrumb } from '@/components/layout/Breadcrumb';
 
 export const CreateUserPage: React.FC = () => {
   const navigate = useNavigate();
@@ -226,6 +227,9 @@ export const CreateUserPage: React.FC = () => {
 
   return (
     <div className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-7xl w-full mx-auto space-y-5">
+      {/* Breadcrumb */}
+      <Breadcrumb section="Configuration" currentPage="Users" />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-surface-border pb-4">
         <div>

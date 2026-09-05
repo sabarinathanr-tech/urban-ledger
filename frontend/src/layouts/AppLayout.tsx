@@ -23,6 +23,7 @@ import {
   Armchair,
   SlidersHorizontal,
   Boxes,
+  Settings,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -51,6 +52,7 @@ export function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState<'profile' | 'permissions'>('profile');
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [resetNotice, setResetNotice] = useState(false);
@@ -254,28 +256,55 @@ export function AppLayout() {
         },
         {
           label: 'Configuration',
-          activePaths: ['/budgets', '/create-user'],
+          activePaths: ['/budgets', '/users', '/create-user', '/settings'],
           items: [
             {
-              label: 'Budgets & Analytic Accounts',
+              label: 'Budgets',
               path: ROUTES.BUDGETS,
               icon: <PieChart size={15} />,
-              description: 'Cost centers & budget lines',
+              description: 'Financial budgets & variance',
+            },
+            {
+              label: 'Analytic Accounts',
+              path: ROUTES.BUDGETS_ANALYTIC,
+              icon: <SlidersHorizontal size={15} />,
+              description: 'Cost centers & analytic distribution',
             },
             ...(isAdmin
               ? [
                   {
-                    label: 'User Management',
-                    path: ROUTES.CREATE_USER,
+                    label: 'Users',
+                    path: ROUTES.USERS,
                     icon: <ShieldCheck size={15} />,
-                    description: 'Provision internal employees',
+                    description: 'User management & permissions',
                     adminOnly: true,
                   },
                 ]
               : []),
+            {
+              label: 'Settings',
+              path: ROUTES.SETTINGS,
+              icon: <Settings size={15} />,
+              description: 'Company profile & ERP parameters',
+            },
           ],
         },
       ];
+
+  const searchableLinks = [
+    { label: 'Dashboard', path: ROUTES.DASHBOARD, group: 'Overview' },
+    ...TOP_MENUS.flatMap((m) =>
+      m.items.map((i) => ({ label: i.label, path: i.path, group: m.label }))
+    ),
+  ];
+
+  const filteredLinks = globalSearch.trim()
+    ? searchableLinks.filter(
+        (item) =>
+          item.label.toLowerCase().includes(globalSearch.toLowerCase()) ||
+          item.group.toLowerCase().includes(globalSearch.toLowerCase())
+      )
+    : [];
 
   const getRoleBadgeVariant = (): 'default' | 'secondary' | 'danger' | 'success' | 'warning' | 'info' | 'outline' => {
     switch (user?.role) {
@@ -470,6 +499,25 @@ export function AppLayout() {
                 placeholder="Search..."
                 className="w-full pl-8 pr-2.5 py-1 text-xs bg-black/20 border border-white/20 rounded-md text-white placeholder:text-purple-200/70 focus:bg-black/30 focus:outline-none focus:border-white/50 transition-all"
               />
+              {globalSearch.trim().length > 0 && (
+                <div className="absolute left-0 mt-1 w-56 bg-white text-navy-900 rounded-lg shadow-xl border border-slate-200 py-1 z-50 max-h-60 overflow-y-auto">
+                  {filteredLinks.length > 0 ? (
+                    filteredLinks.slice(0, 6).map((link) => (
+                      <Link
+                        key={link.path}
+                        to={link.path}
+                        onClick={() => setGlobalSearch('')}
+                        className="flex flex-col px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="font-medium text-navy-900">{link.label}</span>
+                        <span className="text-[10px] text-text-muted">{link.group}</span>
+                      </Link>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-xs text-text-muted">No matching menu item</div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Double-Entry Equality Status Pill */}
@@ -560,22 +608,36 @@ export function AppLayout() {
                       type="button"
                       onClick={() => {
                         setProfileDropdownOpen(false);
+                        setProfileTab('profile');
                         setProfileOpen(true);
                       }}
                       className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-navy-800 hover:bg-slate-50 transition-colors cursor-pointer text-left"
                     >
                       <User size={14} className="text-slate-500" />
-                      <span>My Profile & Permissions</span>
+                      <span>My Profile</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        setProfileTab('permissions');
+                        setProfileOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-navy-800 hover:bg-slate-50 transition-colors cursor-pointer text-left"
+                    >
+                      <ShieldCheck size={14} className="text-slate-500" />
+                      <span>Permissions</span>
                     </button>
 
                     {isAdmin && (
                       <Link
-                        to={ROUTES.CREATE_USER}
+                        to={ROUTES.USERS}
                         onClick={() => setProfileDropdownOpen(false)}
                         className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-navy-800 hover:bg-slate-50 transition-colors cursor-pointer text-left"
                       >
                         <ShieldCheck size={14} className="text-slate-500" />
-                        <span>Admin: User Management</span>
+                        <span>Admin: Users</span>
                       </Link>
                     )}
 
@@ -671,16 +733,30 @@ export function AppLayout() {
             )}
 
             <div className="pt-2 border-t border-[#4E3047] flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setProfileOpen(true);
-                }}
-                className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
-              >
-                <User size={14} /> My Profile ({user?.email})
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setProfileTab('profile');
+                    setProfileOpen(true);
+                  }}
+                  className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
+                >
+                  <User size={14} /> Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setProfileTab('permissions');
+                    setProfileOpen(true);
+                  }}
+                  className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShieldCheck size={14} /> Permissions
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -733,7 +809,11 @@ export function AppLayout() {
       </main>
 
       {/* User Profile Dialog */}
-      <UserProfileDialog isOpen={profileOpen} onClose={() => setProfileOpen(false)} />
+      <UserProfileDialog
+        isOpen={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        initialTab={profileTab}
+      />
     </div>
   );
 }

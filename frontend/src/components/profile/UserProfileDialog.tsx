@@ -13,13 +13,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
 
+import { useState, useEffect } from 'react';
+
 interface UserProfileDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: 'profile' | 'permissions';
 }
 
-export function UserProfileDialog({ isOpen, onClose }: UserProfileDialogProps) {
+export function UserProfileDialog({ isOpen, onClose, initialTab = 'profile' }: UserProfileDialogProps) {
   const { user, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<'profile' | 'permissions'>(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab, isOpen]);
 
   if (!isOpen || !user) return null;
 
@@ -118,70 +126,104 @@ export function UserProfileDialog({ isOpen, onClose }: UserProfileDialogProps) {
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex border-b border-surface-border bg-slate-50 px-6 pt-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'profile'
+                ? 'border-brand-700 text-brand-700'
+                : 'border-transparent text-text-muted hover:text-navy-900'
+            }`}
+          >
+            My Profile
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('permissions')}
+            className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'permissions'
+                ? 'border-brand-700 text-brand-700'
+                : 'border-transparent text-text-muted hover:text-navy-900'
+            }`}
+          >
+            Permissions & Scope
+          </button>
+        </div>
+
         {/* Modal Body */}
         <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto text-sm text-navy-800">
-          {/* Identity & Login ID Box */}
-          <div className="bg-surface-secondary/70 rounded-lg p-4 border border-surface-border space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-text-muted uppercase tracking-wider">
-              <span>Account Credentials</span>
-              <span className="text-emerald-700 flex items-center gap-1 font-medium">
-                <CheckCircle2 size={13} /> Active Session
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <span className="text-xs text-text-muted">Login ID / Email</span>
-                <p className="font-semibold text-navy-900 truncate">{user.email}</p>
-              </div>
-              <div>
-                <span className="text-xs text-text-muted">Assigned Role</span>
-                <p className="font-semibold text-navy-900">{user.role}</p>
-              </div>
-              <div>
-                <span className="text-xs text-text-muted">Organization</span>
-                <p className="font-semibold text-navy-900 flex items-center gap-1">
-                  <Building2 size={13} className="text-text-muted" /> Urban Furniture Ltd.
-                </p>
-              </div>
-              <div>
-                <span className="text-xs text-text-muted">Authentication Mode</span>
-                <p className="font-semibold text-navy-900 flex items-center gap-1">
-                  <KeyRound size={13} className="text-text-muted" /> Verified Session
-                </p>
-              </div>
-            </div>
-
-            {/* Linked Contact (for Portal users or users associated with a contact) */}
-            {(user.role === 'CONTACT' || user.contact) && (
-              <div className="pt-2 border-t border-surface-border/60">
-                <span className="text-xs text-text-muted">Linked Contact Profile</span>
-                <p className="font-semibold text-navy-900">
-                  {user.contact?.name || user.fullName || user.name}
-                  {user.contact?.type && (
-                    <span className="ml-2 text-xs font-normal text-text-muted">
-                      ({user.contact.type})
-                    </span>
-                  )}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Role Description & Permissions */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-navy-900 uppercase tracking-wider">
-              <Shield size={14} className="text-navy-600" />
-              <span>Role Permissions & Scope</span>
-            </div>
-            <div className="space-y-1.5 bg-slate-50 rounded-lg p-3.5 border border-slate-200/80">
-              {getPermissions().map((perm) => (
-                <div key={perm} className="flex items-start gap-2 text-xs text-navy-700 leading-relaxed">
-                  <CheckCircle2 size={13} className="text-emerald-700 shrink-0 mt-0.5" />
-                  <span>{perm}</span>
+          {activeTab === 'profile' && (
+            <>
+              {/* Identity & Login ID Box */}
+              <div className="bg-surface-secondary/70 rounded-lg p-4 border border-surface-border space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-text-muted uppercase tracking-wider">
+                  <span>Account Credentials</span>
+                  <span className="text-emerald-700 flex items-center gap-1 font-medium">
+                    <CheckCircle2 size={13} /> Active Session
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <span className="text-xs text-text-muted">Login ID / Email</span>
+                    <p className="font-semibold text-navy-900 truncate">{user.email}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-muted">Assigned Role</span>
+                    <p className="font-semibold text-navy-900">{user.role}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-muted">Organization</span>
+                    <p className="font-semibold text-navy-900 flex items-center gap-1">
+                      <Building2 size={13} className="text-text-muted" /> Urban Furniture Ltd.
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-muted">Authentication Mode</span>
+                    <p className="font-semibold text-navy-900 flex items-center gap-1">
+                      <KeyRound size={13} className="text-text-muted" /> Verified Session
+                    </p>
+                  </div>
+                </div>
+
+                {/* Linked Contact (for Portal users or users associated with a contact) */}
+                {(user.role === 'CONTACT' || user.contact) && (
+                  <div className="pt-2 border-t border-surface-border/60">
+                    <span className="text-xs text-text-muted">Linked Contact Profile</span>
+                    <p className="font-semibold text-navy-900">
+                      {user.contact?.name || user.fullName || user.name}
+                      {user.contact?.type && (
+                        <span className="ml-2 text-xs font-normal text-text-muted">
+                          ({user.contact.type})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'permissions' && (
+            <>
+              {/* Role Description & Permissions */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-navy-900 uppercase tracking-wider">
+                  <Shield size={14} className="text-navy-600" />
+                  <span>Role Permissions & Scope ({user.role})</span>
+                </div>
+                <div className="space-y-1.5 bg-slate-50 rounded-lg p-3.5 border border-slate-200/80">
+                  {getPermissions().map((perm) => (
+                    <div key={perm} className="flex items-start gap-2 text-xs text-navy-700 leading-relaxed">
+                      <CheckCircle2 size={13} className="text-emerald-700 shrink-0 mt-0.5" />
+                      <span>{perm}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Security Notice */}
           <div className="text-xs text-text-muted bg-amber-50/70 border border-amber-200/60 rounded-lg p-3">
