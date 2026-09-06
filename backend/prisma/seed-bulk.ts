@@ -324,6 +324,41 @@ async function main() {
   const gstAccountId = accountMap.get('2002')!;
   const bankAccountId = accountMap.get('1010')!;
   const cashAccountId = accountMap.get('1000')!;
+  const capitalAccountId = accountMap.get('3000')!;
+
+  // 6b. Initial Owner Equity & Opening Capital Contribution
+  console.log('🏛️ Seeding Opening Capital Equity Contribution (₹1,00,00,000)...');
+  await prisma.journalEntry.create({
+    data: {
+      journalId: bankJournalId,
+      date: new Date('2026-01-01T09:00:00Z'),
+      reference: 'JE-OPENING-CAPITAL-2026',
+      sourceType: 'CAPITAL_CONTRIBUTION',
+      status: 'POSTED',
+      lines: {
+        create: [
+          {
+            accountId: bankAccountId,
+            description: 'Opening Capital Deposit into HDFC Bank Account',
+            debit: new Prisma.Decimal(8000000), // ₹80 Lakhs in Bank
+            credit: new Prisma.Decimal(0),
+          },
+          {
+            accountId: cashAccountId,
+            description: 'Opening Cash Float into Cash in Hand Register',
+            debit: new Prisma.Decimal(2000000), // ₹20 Lakhs in Cash
+            credit: new Prisma.Decimal(0),
+          },
+          {
+            accountId: capitalAccountId,
+            description: "Owner's Equity Capital Contribution (Not a Liability)",
+            debit: new Prisma.Decimal(0),
+            credit: new Prisma.Decimal(10000000), // ₹1 Crore Equity
+          },
+        ],
+      },
+    },
+  });
 
   // 7. Generate 120 Sales Orders + Invoices + Payments + Double-Entry Journal Entries
   console.log('💼 Seeding 120 Sales Orders, Invoices, and Balanced Journal Entries...');
@@ -637,14 +672,16 @@ async function main() {
       });
 
       if (isPaid) {
-        const payDate = new Date(billDate.getTime() + randomBetween(5, 25) * 86400000);
-        const payMethod = 'BANK';
+        const isCash = j % 3 === 0;
+        const payMethod = isCash ? 'CASH' : 'BANK';
+        const payJournalId = isCash ? cashJournalId : bankJournalId;
+        const payAccountId = isCash ? cashAccountId : bankAccountId;
         const payRef = `PAY-VND-2026-${String(j).padStart(4, '0')}`;
         const payJeRef = `JE-PAY-VND-2026-${String(j).padStart(4, '0')}`;
 
         const payJe = await prisma.journalEntry.create({
           data: {
-            journalId: bankJournalId,
+            journalId: payJournalId,
             date: payDate,
             reference: payJeRef,
             sourceType: 'PAYMENT',
@@ -658,8 +695,8 @@ async function main() {
                   credit: new Prisma.Decimal(0),
                 },
                 {
-                  accountId: bankAccountId,
-                  description: `Bank Transfer Settlement: ${billRef}`,
+                  accountId: payAccountId,
+                  description: `${isCash ? 'Cash Payment' : 'Bank Transfer Settlement'}: ${billRef}`,
                   debit: new Prisma.Decimal(0),
                   credit: totalAmount,
                 },
@@ -675,7 +712,7 @@ async function main() {
             paymentDate: payDate,
             amount: totalAmount,
             method: payMethod as any,
-            journalId: bankJournalId,
+            journalId: payJournalId,
             journalEntryId: payJe.id,
             status: 'POSTED',
           },

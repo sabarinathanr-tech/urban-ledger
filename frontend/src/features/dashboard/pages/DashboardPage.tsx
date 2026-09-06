@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/app/config';
 import { useERP } from '@/context/ERPContext';
 import { useAuth } from '@/context/AuthContext';
-import type { DashboardData, RecentTransaction, BudgetHealthItem, BudgetStatus, TransactionStatus } from '../types';
+import type { DashboardData, RecentTransaction, BudgetHealthItem, BudgetStatus, TransactionStatus, AccountingHealthCheck } from '../types';
 import { getDashboardSummary } from '../api';
 
 
@@ -43,6 +43,8 @@ export function DashboardPage() {
 
   const {
     getDashboardMetricsData,
+    getDynamicRevenueExpenseTrend,
+    ledgerEquality,
     invoices,
     bills,
     payments,
@@ -196,6 +198,31 @@ export function DashboardPage() {
     status: (b.status === 'HEALTHY' ? 'on-track' : b.status === 'WARNING' ? 'warning' : 'over-budget') as BudgetStatus,
   }));
 
+  const dynamicTrend = getDynamicRevenueExpenseTrend();
+
+  const dynamicAccountingHealth: AccountingHealthCheck[] = [
+    {
+      id: 'double-entry',
+      label: ledgerEquality.isBalanced ? 'Double-Entry Equality Verified' : 'Ledger Equality Check',
+      description: ledgerEquality.isBalanced
+        ? `Total Debits (₹${ledgerEquality.totalDebits.toLocaleString('en-IN')}) equal Credits`
+        : `Discrepancy of ₹${ledgerEquality.discrepancy.toLocaleString('en-IN')} detected`,
+      status: ledgerEquality.isBalanced ? 'healthy' : 'error',
+    },
+    {
+      id: 'unposted',
+      label: 'Unposted Transactions',
+      description: `${invoices.filter((i) => i.status === 'DRAFT').length} draft invoices, ${bills.filter((b) => b.status === 'DRAFT').length} draft bills`,
+      status: (invoices.filter((i) => i.status === 'DRAFT').length + bills.filter((b) => b.status === 'DRAFT').length) > 0 ? 'warning' : 'healthy',
+    },
+    {
+      id: 'bank-recon',
+      label: 'Bank Reconciliation',
+      description: `${liveMetrics.cashBank > 0 ? 'Positive liquid reserves reconciled' : 'Review bank accounts'}`,
+      status: liveMetrics.cashBank > 0 ? 'healthy' : 'warning',
+    },
+  ];
+
   // Empty state check — no transactions and all metrics zero
   const hasTransactions = liveRecentTxns.length > 0;
   const hasNonZeroMetric = mergedMetrics.some((m) => m.amount !== 0);
@@ -255,7 +282,7 @@ export function DashboardPage() {
       <FinancialSummary metrics={mergedMetrics} />
 
       {/* SECOND ROW: Revenue vs Expense Chart */}
-      <RevenueExpenseChart data={data.revenueExpenseTrend} />
+      <RevenueExpenseChart data={dynamicTrend.length > 0 ? dynamicTrend : data.revenueExpenseTrend} />
 
       {/* THIRD ROW: Budget Health + Receivables + Payables */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -267,7 +294,7 @@ export function DashboardPage() {
       {/* FOURTH ROW: Accounting Health + Recent Transactions */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="lg:col-span-2">
-          <AccountingHealthCard checks={data.accountingHealth} />
+          <AccountingHealthCard checks={dynamicAccountingHealth} />
         </div>
         <div className="lg:col-span-3">
           <RecentTransactions transactions={liveRecentTxns.length > 0 ? liveRecentTxns : data.recentTransactions} />

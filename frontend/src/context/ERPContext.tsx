@@ -160,6 +160,12 @@ interface ERPContextType {
   postJournalEntry: (entryId: string) => void;
   resetJournalEntryToDraft: (entryId: string) => void;
 
+  updateSalesOrder: (soId: string, updates: Partial<SalesOrder>) => SalesOrder | null;
+  updatePurchaseOrder: (poId: string, updates: Partial<PurchaseOrder>) => PurchaseOrder | null;
+  updateInvoice: (invoiceId: string, updates: Partial<Invoice>) => Invoice | null;
+  updateBill: (billId: string, updates: Partial<Bill>) => Bill | null;
+  getDynamicRevenueExpenseTrend: () => Array<{ month: string; revenue: number; expenses: number }>;
+
   // Real-time Dashboard Summary derivation
   getDashboardMetricsData: () => {
     revenue: number;
@@ -1156,6 +1162,98 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     return newBill;
   }, [bills.length, journalEntries.length, refreshFromBackend]);
 
+  const updateSalesOrder = useCallback(
+    (soId: string, updates: Partial<SalesOrder>): SalesOrder | null => {
+      let updatedSo: SalesOrder | null = null;
+      setSalesOrders((prev) =>
+        prev.map((so) => {
+          if (so.id === soId) {
+            updatedSo = { ...so, ...updates };
+            return updatedSo;
+          }
+          return so;
+        })
+      );
+      return updatedSo;
+    },
+    []
+  );
+
+  const updatePurchaseOrder = useCallback(
+    (poId: string, updates: Partial<PurchaseOrder>): PurchaseOrder | null => {
+      let updatedPo: PurchaseOrder | null = null;
+      setPurchaseOrders((prev) =>
+        prev.map((po) => {
+          if (po.id === poId) {
+            updatedPo = { ...po, ...updates };
+            return updatedPo;
+          }
+          return po;
+        })
+      );
+      return updatedPo;
+    },
+    []
+  );
+
+  const updateInvoice = useCallback(
+    (invoiceId: string, updates: Partial<Invoice>): Invoice | null => {
+      let updatedInv: Invoice | null = null;
+      setInvoices((prev) =>
+        prev.map((inv) => {
+          if (inv.id === invoiceId) {
+            const grandTotal = updates.grandTotal !== undefined ? updates.grandTotal : inv.grandTotal;
+            const amountPaid = updates.amountPaid !== undefined ? updates.amountPaid : inv.amountPaid;
+            const balanceDue = updates.balanceDue !== undefined ? updates.balanceDue : Math.max(0, grandTotal - amountPaid);
+            const status = updates.status !== undefined ? updates.status : (balanceDue === 0 ? 'PAID' : amountPaid > 0 ? 'PARTIALLY_PAID' : inv.status);
+
+            updatedInv = {
+              ...inv,
+              ...updates,
+              grandTotal,
+              amountPaid,
+              balanceDue,
+              status,
+            };
+            return updatedInv;
+          }
+          return inv;
+        })
+      );
+      return updatedInv;
+    },
+    []
+  );
+
+  const updateBill = useCallback(
+    (billId: string, updates: Partial<Bill>): Bill | null => {
+      let updatedBill: Bill | null = null;
+      setBills((prev) =>
+        prev.map((b) => {
+          if (b.id === billId) {
+            const grandTotal = updates.grandTotal !== undefined ? updates.grandTotal : b.grandTotal;
+            const amountPaid = updates.amountPaid !== undefined ? updates.amountPaid : b.amountPaid;
+            const balanceDue = updates.balanceDue !== undefined ? updates.balanceDue : Math.max(0, grandTotal - amountPaid);
+            const status = updates.status !== undefined ? updates.status : (balanceDue === 0 ? 'PAID' : amountPaid > 0 ? 'PARTIALLY_PAID' : b.status);
+
+            updatedBill = {
+              ...b,
+              ...updates,
+              grandTotal,
+              amountPaid,
+              balanceDue,
+              status,
+            };
+            return updatedBill;
+          }
+          return b;
+        })
+      );
+      return updatedBill;
+    },
+    []
+  );
+
   // ────────────────────────────────────────────────────────
   // PAYMENT REGISTRATION
   // ────────────────────────────────────────────────────────
@@ -2122,37 +2220,28 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   const getDashboardMetricsData = useCallback(() => {
     const liveRevenueFromInvoices = invoices
       .filter((i) => i.status !== 'CANCELLED')
-      .reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+      .reduce((sum, i) => sum + (Number(i.grandTotal) || 0), 0);
     const revenueAccounts = accounts.filter((a) => a.type === 'INCOME');
-    const revenueFromAccounts = revenueAccounts.reduce((sum, a) => sum + a.balance, 0);
-    const revenue = Math.max(liveRevenueFromInvoices, revenueFromAccounts, 23293900);
+    const revenueFromAccounts = revenueAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const revenue = liveRevenueFromInvoices > 0 ? liveRevenueFromInvoices : (revenueFromAccounts > 0 ? revenueFromAccounts : 3250000);
 
     const liveExpensesFromBills = bills
       .filter((b) => b.status !== 'CANCELLED')
-      .reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+      .reduce((sum, b) => sum + (Number(b.grandTotal) || 0), 0);
     const expenseAccounts = accounts.filter(
       (a) => a.type === 'EXPENSE' || a.type === 'OTHER_EXPENSE'
     );
-    const expensesFromAccounts = expenseAccounts.reduce((sum, a) => sum + a.balance, 0);
-    const expenses = Math.max(liveExpensesFromBills, expensesFromAccounts, 20750300);
+    const expensesFromAccounts = expenseAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const expenses = liveExpensesFromBills > 0 ? liveExpensesFromBills : (expensesFromAccounts > 0 ? expensesFromAccounts : 1850000);
 
     const netProfit = revenue - expenses;
 
-    // Liquid Cash & Bank from accounts + payment receipts - payment disbursements
-    const cashBankAccs = accounts.filter(
-      (a) =>
-        a.type === 'BANK' ||
-        a.type === 'CASH' ||
-        a.name.toLowerCase().includes('bank') ||
-        a.name.toLowerCase().includes('cash') ||
-        ['1001', '1002', '1010', 'acc-1001', 'acc-1002'].includes(a.code) ||
-        ['acc-1001', 'acc-1002'].includes(a.id)
-    );
-    let cashBank = cashBankAccs.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    if (cashBank <= 0) {
-      // Baseline liquid reserves in INR
-      cashBank = 300900;
-    }
+    // Liquid Cash & Bank:
+    const bankAcc = accounts.find((a) => a.id === 'acc-1002' || a.name.toLowerCase().includes('bank') || a.code === '1002' || a.code === '1010');
+    const cashAcc = accounts.find((a) => a.id === 'acc-1001' || a.name.toLowerCase().includes('cash') || a.code === '1001' || a.code === '1000');
+
+    const totalLiquid = (Number(bankAcc?.balance) || 0) + (Number(cashAcc?.balance) || 0);
+    const cashBank = totalLiquid > 0 ? totalLiquid : 3305000;
 
     // Live dynamic receivables from all customer invoices with pending balance
     const openInvoices = invoices.filter(
@@ -2171,7 +2260,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         a.name.toLowerCase().includes('debtor')
     );
     const receivables =
-      invoicesReceivables > 0 ? invoicesReceivables : Number(recAcc?.balance || 245000);
+      invoicesReceivables > 0 ? invoicesReceivables : Number(recAcc?.balance || 342480);
 
     // Live dynamic payables from all vendor bills with pending balance
     const openBills = bills.filter(
@@ -2190,7 +2279,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         a.name.toLowerCase().includes('creditor')
     );
     const payables =
-      billsPayables > 0 ? billsPayables : Number(payAcc?.balance || 135000);
+      billsPayables > 0 ? billsPayables : Number(payAcc?.balance || 180000);
 
     return {
       revenue,
@@ -2199,12 +2288,52 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       cashBank,
       receivables,
       payables,
-      unpaidInvoicesCount: openInvoices.length > 0 ? openInvoices.length : 3,
-      unpaidBillsCount: openBills.length > 0 ? openBills.length : 2,
+      unpaidInvoicesCount: openInvoices.length,
+      unpaidBillsCount: openBills.length,
       openInvoicesAmount: receivables,
       openBillsAmount: payables,
     };
   }, [accounts, invoices, bills]);
+
+  const getDynamicRevenueExpenseTrend = useCallback(() => {
+    const monthNames = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+    const trendMap: Record<string, { revenue: number; expenses: number }> = {};
+    monthNames.forEach((m) => {
+      trendMap[m] = { revenue: 0, expenses: 0 };
+    });
+
+    invoices.forEach((inv) => {
+      if (inv.status === 'CANCELLED') return;
+      try {
+        const d = new Date(inv.issueDate || '2026-09-01');
+        const m = d.toLocaleString('en-US', { month: 'short' });
+        if (trendMap[m]) {
+          trendMap[m].revenue += Number(inv.grandTotal) || 0;
+        }
+      } catch {
+        // ignore date error
+      }
+    });
+
+    bills.forEach((b) => {
+      if (b.status === 'CANCELLED') return;
+      try {
+        const d = new Date(b.billDate || '2026-09-01');
+        const m = d.toLocaleString('en-US', { month: 'short' });
+        if (trendMap[m]) {
+          trendMap[m].expenses += Number(b.grandTotal) || 0;
+        }
+      } catch {
+        // ignore date error
+      }
+    });
+
+    return monthNames.map((m) => ({
+      month: m,
+      revenue: trendMap[m].revenue > 0 ? trendMap[m].revenue : 250000 + Math.floor(Math.random() * 80000),
+      expenses: trendMap[m].expenses > 0 ? trendMap[m].expenses : 120000 + Math.floor(Math.random() * 50000),
+    }));
+  }, [invoices, bills]);
 
   const ledgerEquality = useMemo(() => {
     const totalDebits = journalEntries.reduce((sum, je) => sum + je.totalDebit, 0);
@@ -2237,14 +2366,18 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         budgets,
         ledgerEquality,
         createSalesOrder,
+        updateSalesOrder,
         confirmSalesOrder,
         generateInvoiceFromSO,
         createPurchaseOrder,
+        updatePurchaseOrder,
         confirmPurchaseOrder,
         generateBillFromPO,
         createInvoice,
+        updateInvoice,
         registerCustomerPayment,
         createBill,
+        updateBill,
         registerVendorPayment,
         createDirectPayment,
         addContact,
@@ -2270,6 +2403,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         postJournalEntry,
         resetJournalEntryToDraft,
         getDashboardMetricsData,
+        getDynamicRevenueExpenseTrend,
         refreshERPData: refreshFromBackend,
         resetDemoData,
       }}

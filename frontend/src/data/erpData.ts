@@ -20652,18 +20652,18 @@ export const INITIAL_PAYMENTS: PaymentItem[] = [
 // ACCOUNTING: CHART OF ACCOUNTS
 // ==========================================
 export const INITIAL_ACCOUNTS: AccountItem[] = [
-  { id: 'acc-1002', code: '1002', name: 'Bank A/c', type: 'ASSET', balance: 285500, currency: 'INR' },
-  { id: 'acc-5001', code: '5001', name: 'Purchase Expense A/c', type: 'EXPENSE', balance: 28000, currency: 'INR' },
-  { id: 'acc-1005', code: '1005', name: 'Building A/c', type: 'ASSET', balance: 250000, currency: 'INR' },
-  { id: 'acc-2001', code: '2001', name: 'Creditors A/c', type: 'LIABILITY', balance: 13040, currency: 'INR' },
-  { id: 'acc-4001', code: '4001', name: 'Sales Income A/c', type: 'INCOME', balance: 58500, currency: 'INR' },
-  { id: 'acc-1001', code: '1001', name: 'Cash A/c', type: 'ASSET', balance: 15400, currency: 'INR' },
-  { id: 'acc-5004', code: '5004', name: 'Other Expense A/c', type: 'EXPENSE', balance: 4500, currency: 'INR' },
-  { id: 'acc-3001', code: '3001', name: 'Capital A/c', type: 'CAPITAL', balance: 400000, currency: 'INR' },
-  { id: 'acc-1003', code: '1003', name: 'Debtors A/c (Receivable)', type: 'ASSET', balance: 42480, currency: 'INR' },
-  { id: 'acc-1004', code: '1004', name: 'Finished Furniture Inventory', type: 'ASSET', balance: 145000, currency: 'INR' },
-  { id: 'acc-2002', code: '2002', name: 'GST Output Tax Liability (18%)', type: 'LIABILITY', balance: 10530, currency: 'INR' },
-  { id: 'acc-3002', code: '3002', name: 'Retained Earnings', type: 'EQUITY', balance: 44310, currency: 'INR' },
+  { id: 'acc-1002', code: '1002', name: 'Bank A/c (HDFC Current)', type: 'ASSET', balance: 2855000, currency: 'INR' },
+  { id: 'acc-1001', code: '1001', name: 'Cash in Hand A/c', type: 'ASSET', balance: 450000, currency: 'INR' },
+  { id: 'acc-1003', code: '1003', name: 'Debtors A/c (Receivable)', type: 'ASSET', balance: 342480, currency: 'INR' },
+  { id: 'acc-1004', code: '1004', name: 'Finished Furniture Inventory', type: 'ASSET', balance: 1450000, currency: 'INR' },
+  { id: 'acc-1005', code: '1005', name: 'Building & Workshop Property', type: 'ASSET', balance: 2500000, currency: 'INR' },
+  { id: 'acc-3001', code: '3001', name: 'Capital A/c (Owner Contribution)', type: 'CAPITAL', balance: 6500000, currency: 'INR' },
+  { id: 'acc-3002', code: '3002', name: 'Retained Earnings & Reserves', type: 'EQUITY', balance: 812180, currency: 'INR' },
+  { id: 'acc-2001', code: '2001', name: 'Creditors A/c (Payable)', type: 'LIABILITY', balance: 180000, currency: 'INR' },
+  { id: 'acc-2002', code: '2002', name: 'GST Output Tax Liability (18%)', type: 'LIABILITY', balance: 105300, currency: 'INR' },
+  { id: 'acc-4001', code: '4001', name: 'Sales Income A/c', type: 'INCOME', balance: 585000, currency: 'INR' },
+  { id: 'acc-5001', code: '5001', name: 'Purchase Expense A/c', type: 'EXPENSE', balance: 280000, currency: 'INR' },
+  { id: 'acc-5004', code: '5004', name: 'Other Operating Expense A/c', type: 'EXPENSE', balance: 45000, currency: 'INR' },
 ];
 
 // ==========================================

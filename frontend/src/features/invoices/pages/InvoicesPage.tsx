@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   PieChart,
   ArrowLeft,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,7 @@ export function InvoicesPage() {
   const {
     invoices,
     createInvoice,
+    updateInvoice,
     registerCustomerPayment,
     payments,
     contacts,
@@ -79,6 +81,82 @@ export function InvoicesPage() {
   const [customProductPrice, setCustomProductPrice] = useState(15000);
   const [customProductCategory, setCustomProductCategory] = useState('Custom Furniture');
   const [customAnalyticName, setCustomAnalyticName] = useState('');
+
+  // Edit Invoice States
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editInvoiceId, setEditInvoiceId] = useState('');
+  const [editCustomerId, setEditCustomerId] = useState('');
+  const [editIssueDate, setEditIssueDate] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editStatus, setEditStatus] = useState<Invoice['status']>('POSTED');
+  const [editReference, setEditReference] = useState('');
+  const [editUnitPrice, setEditUnitPrice] = useState<number>(0);
+  const [editQuantity, setEditQuantity] = useState<number>(1);
+  const [editProductName, setEditProductName] = useState('');
+
+  const handleOpenEditInvoice = (inv: Invoice) => {
+    setEditInvoiceId(inv.id);
+    setEditCustomerId(inv.customerId);
+    setEditIssueDate(inv.issueDate);
+    setEditDueDate(inv.dueDate);
+    setEditStatus(inv.status);
+    setEditReference(inv.invoiceReference || inv.invoiceNumber);
+    const firstLine = inv.lines[0];
+    setEditProductName(firstLine?.productName || 'Ergonomic Office Chair');
+    setEditUnitPrice(firstLine?.unitPrice || 4500);
+    setEditQuantity(firstLine?.quantity || 1);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditedInvoice = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cust = contacts.find((c) => c.id === editCustomerId);
+    const subtotal = editQuantity * editUnitPrice;
+    const taxTotal = Number((subtotal * 0.18).toFixed(2));
+    const grandTotal = Number((subtotal + taxTotal).toFixed(2));
+
+    const existingInv = invoices.find((i) => i.id === editInvoiceId);
+    const amountPaid = editStatus === 'PAID' ? grandTotal : (existingInv?.amountPaid || 0);
+    const balanceDue = Math.max(0, grandTotal - amountPaid);
+
+    const updated = updateInvoice(editInvoiceId, {
+      customerId: editCustomerId,
+      customerName: cust?.name || existingInv?.customerName || 'Customer',
+      issueDate: editIssueDate,
+      dueDate: editDueDate,
+      status: editStatus,
+      invoiceReference: editReference,
+      subtotal,
+      taxTotal,
+      grandTotal,
+      amountPaid,
+      balanceDue,
+      lines: [
+        {
+          id: existingInv?.lines[0]?.id || `line-${Date.now()}`,
+          productId: existingInv?.lines[0]?.productId || 'prod-1',
+          productName: editProductName,
+          quantity: editQuantity,
+          unitPrice: editUnitPrice,
+          taxRate: 18,
+          subtotal,
+          taxAmount: taxTotal,
+          total: grandTotal,
+          chartOfAccount: 'Sales Income A/c',
+          analyticAccountName: existingInv?.lines[0]?.analyticAccountName || 'Commercial Furniture Sales (Income)',
+        },
+      ],
+    });
+
+    if (updated) {
+      setIsEditModalOpen(false);
+      if (selectedInvoice && selectedInvoice.id === editInvoiceId) {
+        setSelectedInvoice(updated);
+      }
+      setNotice(`Invoice ${updated.invoiceNumber} updated successfully.`);
+      setTimeout(() => setNotice(null), 4000);
+    }
+  };
 
   useEffect(() => {
     if (!newCustomerId && (eligibleCustomers[0]?.id || contacts[0]?.id)) {
@@ -404,6 +482,14 @@ export function InvoicesPage() {
                       )}
                       <button
                         type="button"
+                        onClick={() => handleOpenEditInvoice(inv)}
+                        title="Edit Invoice"
+                        className="p-1.5 rounded-md text-slate-500 hover:text-brand-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           setSelectedInvoice(inv);
                           setIsPrintModalOpen(true);
@@ -482,6 +568,16 @@ export function InvoicesPage() {
                           >
                             View
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEditInvoice(inv)}
+                            className="h-7 text-[11px] px-2 text-brand-700 hover:bg-brand-50 border-brand-200 cursor-pointer flex items-center gap-1"
+                            title="Edit Invoice"
+                          >
+                            <Pencil size={11} />
+                            <span>Edit</span>
+                          </Button>
                           {inv.balanceDue > 0 && (
                             <Button
                               size="sm"
@@ -552,6 +648,16 @@ export function InvoicesPage() {
                     SO ({selectedInvoice.soNumber || 'SO'})
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleOpenEditInvoice(selectedInvoice)}
+                  className="h-8 text-xs font-semibold text-brand-700 border-brand-300 bg-brand-50/50 hover:bg-brand-100/70 cursor-pointer shadow-2xs flex items-center gap-1"
+                  title="Edit Invoice Details"
+                >
+                  <Pencil size={13} className="text-brand-600" />
+                  <span>Edit</span>
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -717,6 +823,15 @@ export function InvoicesPage() {
                 <ExternalLink size={11} />
               </Link>
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleOpenEditInvoice(selectedInvoice)}
+                  className="h-8 text-xs flex items-center gap-1.5 border-brand-300 text-brand-700 hover:bg-brand-50 cursor-pointer shadow-2xs font-semibold"
+                >
+                  <Pencil size={13} />
+                  <span>Edit Invoice</span>
+                </Button>
                 {selectedInvoice.balanceDue > 0 && (
                   <Button
                     size="sm"
@@ -732,6 +847,150 @@ export function InvoicesPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* EDIT CUSTOMER INVOICE MODAL                                 */}
+      {/* ============================================================ */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                  <Pencil size={15} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-navy-900">Edit Invoice</h3>
+                  <p className="text-xs text-text-muted">Update details and status for invoice</p>
+                </div>
+              </div>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedInvoice} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-navy-800">Customer</label>
+                  <select
+                    value={editCustomerId}
+                    onChange={(e) => setEditCustomerId(e.target.value)}
+                    className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-500 focus:outline-none"
+                  >
+                    {contacts.filter((c) => c.type === 'CUSTOMER' || c.type === 'BOTH').map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-navy-800">Invoice Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 font-semibold focus:border-brand-500 focus:outline-none"
+                  >
+                    <option value="DRAFT">Draft</option>
+                    <option value="POSTED">Posted (Unpaid)</option>
+                    <option value="PARTIALLY_PAID">Partially Paid</option>
+                    <option value="PAID">Paid in Full</option>
+                    <option value="OVERDUE">Overdue</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-navy-800">Issue Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={editIssueDate}
+                    onChange={(e) => setEditIssueDate(e.target.value)}
+                    className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-navy-800">Due Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-navy-800">Invoice Reference</label>
+                <input
+                  type="text"
+                  value={editReference}
+                  onChange={(e) => setEditReference(e.target.value)}
+                  className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 font-mono focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="font-semibold text-slate-700 block">Item Details</span>
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-slate-500 font-medium">Product / Item Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editProductName}
+                    onChange={(e) => setEditProductName(e.target.value)}
+                    className="w-full rounded border border-surface-border bg-white px-3 py-1.5 text-xs text-navy-900 focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] text-slate-500 font-medium">Quantity</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={editQuantity}
+                      onChange={(e) => setEditQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full rounded border border-surface-border bg-white px-3 py-1.5 text-xs text-navy-900 font-mono focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] text-slate-500 font-medium">Unit Price (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      value={editUnitPrice}
+                      onChange={(e) => setEditUnitPrice(parseFloat(e.target.value) || 0)}
+                      className="w-full rounded border border-surface-border bg-white px-3 py-1.5 text-xs text-navy-900 font-mono focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-xs text-navy-950">
+                  <span>Grand Total (incl. 18% GST):</span>
+                  <span className="font-mono text-brand-700">₹{Math.round(editQuantity * editUnitPrice * 1.18).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white font-semibold cursor-pointer">
+                  Save Changes
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

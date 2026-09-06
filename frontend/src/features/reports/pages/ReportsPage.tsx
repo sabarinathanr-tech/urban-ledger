@@ -9,6 +9,8 @@ import {
   PieChart,
   Boxes,
   Info,
+  Pencil,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +24,18 @@ type ReportType = 'PL' | 'BS' | 'BUDGET' | 'STOCK';
 export function ReportsPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { accounts, budgets, products } = useERP();
+  const { accounts, budgets, products, updateAccount } = useERP();
 
   const [reportType, setReportType] = useState<ReportType>('PL');
   const [period, setPeriod] = useState('FY 2025-26');
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+
+  // Edit Account state in Balance Sheet
+  const [editingAccountModal, setEditingAccountModal] = useState<any | null>(null);
+  const [editAccountName, setEditAccountName] = useState('');
+  const [editAccountCode, setEditAccountCode] = useState('');
+  const [editAccountType, setEditAccountType] = useState<'ASSET' | 'LIABILITY' | 'CAPITAL' | 'EQUITY' | 'INCOME' | 'EXPENSE'>('ASSET');
+  const [editAccountBalance, setEditAccountBalance] = useState<number | string>('');
 
   // Synchronize report type with URL
   useEffect(() => {
@@ -285,7 +294,7 @@ export function ReportsPage() {
             <p className="text-xs text-text-muted">Urban Furniture &bull; As of 31 March 2026 &bull; Double-Entry Guaranteed</p>
           </div>
 
-          {/* Two-Column T-Table matching Diagram */}
+          {/* Two-Column T-Table with Explicit Distinction: Assets, Owner Equity, and External Liabilities */}
           {(() => {
             const bankAcc = accounts.find((a) => a.id === 'acc-1002' || a.name.toLowerCase().includes('bank'));
             const cashAcc = accounts.find((a) => a.id === 'acc-1001' || a.name.toLowerCase().includes('cash'));
@@ -296,33 +305,49 @@ export function ReportsPage() {
             const creditorsAcc = accounts.find((a) => a.id === 'acc-2001' || a.name.toLowerCase().includes('payable') || a.name.toLowerCase().includes('creditor'));
             const gstAcc = accounts.find((a) => a.code === '2002' || a.name.toLowerCase().includes('gst'));
             const capitalAcc = accounts.find((a) => a.code === '3001' || a.type === 'CAPITAL' || a.name.toLowerCase().includes('capital'));
+            const retainedAcc = accounts.find((a) => a.code === '3002' || a.name.toLowerCase().includes('retained'));
 
-            const bankBal = bankAcc?.balance || 285500;
-            const cashBal = cashAcc?.balance || 15400;
-            const debtorsBal = debtorsAcc?.balance || 42480;
-            const inventoryBal = inventoryAcc?.balance || 145000;
-            const buildingBal = buildingAcc?.balance || 250000;
+            const bankBal = Math.max(0, Number(bankAcc?.balance ?? 2855000));
+            const cashBal = Math.max(0, Number(cashAcc?.balance ?? 450000));
+            const debtorsBal = Math.max(0, Number(debtorsAcc?.balance ?? 342480));
+            const inventoryBal = Math.max(0, Number(inventoryAcc?.balance ?? 1450000));
+            const buildingBal = Math.max(0, Number(buildingAcc?.balance ?? 2500000));
             const totalAssetBal = bankBal + cashBal + debtorsBal + inventoryBal + buildingBal;
 
-            const creditorsBal = creditorsAcc?.balance || 13040;
-            const gstBal = gstAcc?.balance || 10530;
+            const creditorsBal = Math.max(0, Number(creditorsAcc?.balance ?? 180000));
+            const gstBal = Math.max(0, Number(gstAcc?.balance ?? 105300));
             const totalLiabilitiesOnly = creditorsBal + gstBal;
 
-            const baseCapitalBal = capitalAcc?.balance || 400000;
-            const totalEquityBal = totalAssetBal - totalLiabilitiesOnly;
+            const baseCapitalBal = Math.max(0, Number(capitalAcc?.balance ?? 6500000));
+            const calculatedRetained = Math.max(0, totalAssetBal - totalLiabilitiesOnly - baseCapitalBal);
+            const retainedEarningsBal = calculatedRetained > 0 ? calculatedRetained : Number(retainedAcc?.balance || 812180);
+            const totalEquityBal = baseCapitalBal + retainedEarningsBal;
 
             const totalEquityAndLiabilities = totalLiabilitiesOnly + totalEquityBal;
+
+            const handleStartEdit = (accToEdit: { id: string; name: string; code: string; type: any; balance: number }) => {
+              setEditingAccountModal(accToEdit);
+              setEditAccountName(accToEdit.name);
+              setEditAccountCode(accToEdit.code);
+              setEditAccountType(accToEdit.type);
+              setEditAccountBalance(accToEdit.balance);
+            };
 
             return (
               <div className="space-y-6 max-w-5xl mx-auto text-xs">
                 {/* Informational Guidance Banner */}
-                <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-4 text-xs text-navy-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-xs text-navy-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
                   <div className="space-y-1">
-                    <span className="font-bold text-brand-900 block">💡 Accounting Classification Explained:</span>
+                    <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                      <span>🏛️ Clarified Accounting Structure:</span>
+                      <Badge variant="outline" className="bg-white text-emerald-800 border-emerald-300 font-semibold text-[10px]">
+                        Assets = Equity + Liabilities
+                      </Badge>
+                    </span>
                     <p className="text-slate-600 text-[11px] leading-relaxed">
-                      <strong>Cash & Bank</strong> are classified under <strong>Assets</strong> (economic resources owned by the business). 
-                      <strong>Capital & Reserves</strong> are listed under <strong>Equity & Liabilities</strong> because the business owes this value to its owners, fulfilling the golden equation: 
-                      <code className="bg-white px-1.5 py-0.5 rounded border border-brand-200 text-brand-800 font-bold ml-1">Assets = Liabilities + Owner Equity</code>.
+                      • <strong>Cash & Bank</strong> are enterprise <strong>Assets</strong> (tangible liquid economic resources).<br />
+                      • <strong>Capital & Reserves</strong> are <strong>Owner's Equity</strong> (the owner's stake & net worth — <em>not a commercial debt or liability</em>).<br />
+                      • <strong>Liabilities</strong> strictly represent external obligations (Trade Creditors & GST taxes owed to external third parties).
                     </p>
                   </div>
                   <Button
@@ -331,7 +356,7 @@ export function ReportsPage() {
                     onClick={() => navigate(ROUTES.ACCOUNTING)}
                     className="shrink-0 text-xs font-semibold text-brand-700 hover:bg-brand-100/60 border-brand-300"
                   >
-                    ✏️ Edit Accounts & Balances
+                    ✏️ Open Chart of Accounts
                   </Button>
                 </div>
 
@@ -339,28 +364,72 @@ export function ReportsPage() {
                   {/* Left Column: Assets */}
                   <div className="rounded-xl border border-surface-border bg-slate-50/50 p-5 flex flex-col justify-between space-y-4 shadow-2xs">
                     <div className="space-y-4">
-                      <div className="border-b-2 border-navy-950 pb-2">
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Assets</h3>
-                        <span className="text-[10px] text-slate-500 font-medium">Economic resources owned and utilized by the enterprise</span>
+                      <div className="border-b-2 border-navy-950 pb-2 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Assets</h3>
+                          <span className="text-[10px] text-slate-500 font-medium">Economic resources owned and utilized by the enterprise</span>
+                        </div>
+                        <Badge variant="outline" className="bg-white text-slate-700 border-slate-300 text-[10px]">
+                          Debits Owned
+                        </Badge>
                       </div>
 
                       {/* Current Assets */}
                       <div className="space-y-2">
                         <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Current Assets (Liquid & Receivables)</span>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">🏦 Bank A/c (HDFC Current)</span>
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 group hover:border-brand-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">🏦 Bank A/c (HDFC Current)</span>
+                            <button
+                              onClick={() => handleStartEdit(bankAcc || { id: 'acc-1002', name: 'Bank A/c (HDFC Current)', code: '1002', type: 'ASSET', balance: bankBal })}
+                              title="Edit Bank Account"
+                              className="text-slate-400 hover:text-brand-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
                           <span className="font-mono font-bold text-navy-950">₹{bankBal.toLocaleString('en-IN')}</span>
                         </div>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">💵 Cash in Hand A/c</span>
+
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 group hover:border-brand-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">💵 Cash in Hand A/c</span>
+                            <button
+                              onClick={() => handleStartEdit(cashAcc || { id: 'acc-1001', name: 'Cash in Hand A/c', code: '1001', type: 'ASSET', balance: cashBal })}
+                              title="Edit Cash Account"
+                              className="text-slate-400 hover:text-brand-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
                           <span className="font-mono font-bold text-navy-950">₹{cashBal.toLocaleString('en-IN')}</span>
                         </div>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">👥 Debtors (Accounts Receivable)</span>
+
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 group hover:border-brand-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">👥 Debtors (Accounts Receivable)</span>
+                            <button
+                              onClick={() => handleStartEdit(debtorsAcc || { id: 'acc-1003', name: 'Debtors (Accounts Receivable)', code: '1003', type: 'ASSET', balance: debtorsBal })}
+                              title="Edit Debtors Account"
+                              className="text-slate-400 hover:text-brand-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
                           <span className="font-mono font-bold text-navy-950">₹{debtorsBal.toLocaleString('en-IN')}</span>
                         </div>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">📦 Finished Furniture Inventory</span>
+
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 group hover:border-brand-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">📦 Finished Furniture Inventory</span>
+                            <button
+                              onClick={() => handleStartEdit(inventoryAcc || { id: 'acc-1004', name: 'Finished Furniture Inventory', code: '1004', type: 'ASSET', balance: inventoryBal })}
+                              title="Edit Inventory Account"
+                              className="text-slate-400 hover:text-brand-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
                           <span className="font-mono font-bold text-navy-950">₹{inventoryBal.toLocaleString('en-IN')}</span>
                         </div>
                       </div>
@@ -368,8 +437,17 @@ export function ReportsPage() {
                       {/* Non-Current Assets */}
                       <div className="space-y-2 pt-2 border-t border-slate-200">
                         <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Fixed / Non-Current Assets</span>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">🏢 Workshop & Building Property</span>
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 group hover:border-brand-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">🏢 Workshop & Building Property</span>
+                            <button
+                              onClick={() => handleStartEdit(buildingAcc || { id: 'acc-1005', name: 'Workshop & Building Property', code: '1005', type: 'ASSET', balance: buildingBal })}
+                              title="Edit Building Account"
+                              className="text-slate-400 hover:text-brand-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
                           <span className="font-mono font-bold text-navy-950">₹{buildingBal.toLocaleString('en-IN')}</span>
                         </div>
                       </div>
@@ -381,42 +459,106 @@ export function ReportsPage() {
                     </div>
                   </div>
 
-                  {/* Right Column: Equity & Liabilities */}
-                  <div className="rounded-xl border border-surface-border bg-slate-50/50 p-5 flex flex-col justify-between space-y-4 shadow-2xs">
-                    <div className="space-y-4">
-                      <div className="border-b-2 border-navy-950 pb-2">
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Equity & Liabilities</h3>
-                        <span className="text-[10px] text-slate-500 font-medium">Owner capital, retained surpluses, and vendor obligations</span>
+                  {/* Right Column: Owner Equity & External Liabilities */}
+                  <div className="space-y-4 flex flex-col justify-between">
+                    {/* CARD 1: OWNER EQUITY (NOT A LIABILITY) */}
+                    <div className="rounded-xl border border-indigo-200 bg-indigo-50/30 p-5 space-y-4 shadow-2xs">
+                      <div className="border-b-2 border-indigo-900 pb-2 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-indigo-950">Owner's Equity</h3>
+                          <span className="text-[10px] text-indigo-600 font-medium">Owner capital contributions and retained enterprise surplus (NOT a liability)</span>
+                        </div>
+                        <Badge className="bg-indigo-100 text-indigo-800 border-indigo-300 text-[10px]">
+                          Owner Capital
+                        </Badge>
                       </div>
 
-                      {/* Section 1: Equity / Capital */}
                       <div className="space-y-2">
-                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Owner's Equity & Capital</span>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">🏛️ Capital A/c (Owner Contribution)</span>
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-indigo-100 group hover:border-indigo-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">🏛️ Capital A/c (Owner Contribution)</span>
+                            <button
+                              onClick={() => handleStartEdit(capitalAcc || { id: 'acc-3001', name: 'Capital A/c (Owner Contribution)', code: '3001', type: 'CAPITAL', balance: baseCapitalBal })}
+                              title="Edit Capital Account"
+                              className="text-slate-400 hover:text-indigo-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
                           <span className="font-mono font-bold text-navy-950">₹{baseCapitalBal.toLocaleString('en-IN')}</span>
                         </div>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">📈 Retained Earnings & Reserves</span>
-                          <span className="font-mono font-bold text-navy-950">₹{(totalEquityBal - baseCapitalBal).toLocaleString('en-IN')}</span>
+
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-indigo-100 group hover:border-indigo-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">📈 Retained Earnings & Reserves</span>
+                            <button
+                              onClick={() => handleStartEdit(retainedAcc || { id: 'acc-3002', name: 'Retained Earnings & Reserves', code: '3002', type: 'EQUITY', balance: retainedEarningsBal })}
+                              title="Edit Retained Earnings"
+                              className="text-slate-400 hover:text-indigo-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                          <span className="font-mono font-bold text-navy-950">₹{retainedEarningsBal.toLocaleString('en-IN')}</span>
                         </div>
                       </div>
 
-                      {/* Section 2: Liabilities */}
-                      <div className="space-y-2 pt-2 border-t border-slate-200">
-                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Current & Non-Current Liabilities</span>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">🤝 Creditors (Accounts Payable)</span>
-                          <span className="font-mono font-bold text-navy-950">₹{creditorsBal.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">⚖️ GST Output Tax Liability</span>
-                          <span className="font-mono font-bold text-navy-950">₹{gstBal.toLocaleString('en-IN')}</span>
-                        </div>
+                      <div className="border-t border-indigo-200 pt-2 flex justify-between font-bold text-xs text-indigo-950">
+                        <span>Total Owner Equity</span>
+                        <span className="font-mono text-indigo-700">₹{totalEquityBal.toLocaleString('en-IN')}</span>
                       </div>
                     </div>
 
-                    <div className="border-t-2 border-navy-950 pt-3 flex justify-between font-bold text-sm text-navy-950 bg-white p-3 rounded-lg border border-slate-200">
+                    {/* CARD 2: EXTERNAL LIABILITIES */}
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/30 p-5 space-y-4 shadow-2xs">
+                      <div className="border-b-2 border-amber-900 pb-2 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-amber-950">External Liabilities</h3>
+                          <span className="text-[10px] text-amber-700 font-medium">Commercial supplier obligations & statutory tax liabilities</span>
+                        </div>
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
+                          Payables & Taxes
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-amber-100 group hover:border-amber-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">🤝 Creditors (Accounts Payable)</span>
+                            <button
+                              onClick={() => handleStartEdit(creditorsAcc || { id: 'acc-2001', name: 'Creditors (Accounts Payable)', code: '2001', type: 'LIABILITY', balance: creditorsBal })}
+                              title="Edit Creditors Account"
+                              className="text-slate-400 hover:text-amber-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                          <span className="font-mono font-bold text-navy-950">₹{creditorsBal.toLocaleString('en-IN')}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-amber-100 group hover:border-amber-300 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-navy-900">⚖️ GST Output Tax Liability</span>
+                            <button
+                              onClick={() => handleStartEdit(gstAcc || { id: 'acc-2002', name: 'GST Output Tax Liability (18%)', code: '2002', type: 'LIABILITY', balance: gstBal })}
+                              title="Edit GST Account"
+                              className="text-slate-400 hover:text-amber-700 p-1 cursor-pointer transition-colors opacity-70 group-hover:opacity-100"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                          <span className="font-mono font-bold text-navy-950">₹{gstBal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-amber-200 pt-2 flex justify-between font-bold text-xs text-amber-950">
+                        <span>Total External Liabilities</span>
+                        <span className="font-mono text-amber-700">₹{totalLiabilitiesOnly.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+
+                    {/* GRAND TOTAL: Total Equity & Liabilities */}
+                    <div className="border-t-2 border-navy-950 pt-3 flex justify-between font-bold text-sm text-navy-950 bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
                       <span>Total Equity & Liabilities</span>
                       <span className="font-mono text-brand-700">₹{totalEquityAndLiabilities.toLocaleString('en-IN')}</span>
                     </div>
@@ -429,8 +571,8 @@ export function ReportsPage() {
                   <p>
                     Every debit in Urban Ledger has an equal credit. 
                     The Balance Sheet presents the financial status where:
-                    <span className="font-mono font-bold text-navy-950 block my-1">Total Assets (₹{totalAssetBal.toLocaleString('en-IN')}) = Total Equity & Liabilities (₹{totalEquityAndLiabilities.toLocaleString('en-IN')})</span>
-                    If you wish to adjust any account name, code, type, or initial balance, click <strong>"Edit Accounts & Balances"</strong> above to update the Chart of Accounts in real time.
+                    <span className="font-mono font-bold text-navy-950 block my-1">Total Assets (₹{totalAssetBal.toLocaleString('en-IN')}) = Total Equity (₹{totalEquityBal.toLocaleString('en-IN')}) + Total Liabilities (₹{totalLiabilitiesOnly.toLocaleString('en-IN')})</span>
+                    Click the <strong>pencil (✏️)</strong> icon beside any account to update its name, category, or balance directly.
                   </p>
                 </div>
               </div>
@@ -570,6 +712,128 @@ export function ReportsPage() {
         </div>
       )}
       </div>
+
+      {/* Edit Account Modal in Balance Sheet */}
+      {editingAccountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                  <Pencil size={15} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-navy-900">Edit Account & Balance</h3>
+                  <p className="text-[11px] text-text-muted">{editingAccountModal.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingAccountModal(null)}
+                className="text-text-muted hover:text-navy-900 p-1 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!editingAccountModal || !editAccountName.trim()) return;
+                updateAccount(editingAccountModal.id, {
+                  name: editAccountName.trim(),
+                  code: editAccountCode.trim() || undefined,
+                  type: editAccountType,
+                  balance: parseFloat(String(editAccountBalance)) || 0,
+                });
+                setEditingAccountModal(null);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-navy-800">
+                  Account Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editAccountName}
+                  onChange={(e) => setEditAccountName(e.target.value)}
+                  className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-navy-800">
+                    Account Code
+                  </label>
+                  <input
+                    type="text"
+                    value={editAccountCode}
+                    onChange={(e) => setEditAccountCode(e.target.value)}
+                    className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-navy-800">
+                    Balance (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editAccountBalance}
+                    onChange={(e) => setEditAccountBalance(e.target.value)}
+                    className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 font-mono focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-navy-800">
+                  Classification Category
+                </label>
+                <select
+                  value={editAccountType}
+                  onChange={(e) => setEditAccountType(e.target.value as any)}
+                  className="w-full rounded border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-500 focus:outline-none"
+                >
+                  <optgroup label="Assets">
+                    <option value="ASSET">Asset (Cash, Bank, Debtors, Stock, Property)</option>
+                  </optgroup>
+                  <optgroup label="Equity (Owner Capital - NOT Liability)">
+                    <option value="CAPITAL">Capital (Owner Investment)</option>
+                    <option value="EQUITY">Equity (Retained Reserves)</option>
+                  </optgroup>
+                  <optgroup label="Liabilities (External Debts)">
+                    <option value="LIABILITY">Liability (Creditors, GST Dues)</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingAccountModal(null)}
+                  className="text-xs cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white text-xs cursor-pointer"
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {isPdfModalOpen && (
         <FinancialReportPdfModal

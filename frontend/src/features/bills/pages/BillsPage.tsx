@@ -12,6 +12,7 @@ import {
   PieChart,
   Package,
   ArrowLeft,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,7 @@ export function BillsPage() {
   const {
     bills,
     createBill,
+    updateBill,
     registerVendorPayment,
     payments,
     contacts,
@@ -79,6 +81,82 @@ export function BillsPage() {
   const [customProductPrice, setCustomProductPrice] = useState(12000);
   const [customProductCategory, setCustomProductCategory] = useState('Raw Materials');
   const [customAnalyticName, setCustomAnalyticName] = useState('');
+
+  // Edit Bill States
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editBillId, setEditBillId] = useState('');
+  const [editVendorId, setEditVendorId] = useState('');
+  const [editBillDate, setEditBillDate] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editStatus, setEditStatus] = useState<Bill['status']>('POSTED');
+  const [editReference, setEditReference] = useState('');
+  const [editUnitPrice, setEditUnitPrice] = useState<number>(0);
+  const [editQuantity, setEditQuantity] = useState<number>(1);
+  const [editProductName, setEditProductName] = useState('');
+
+  const handleOpenEditBill = (b: Bill) => {
+    setEditBillId(b.id);
+    setEditVendorId(b.vendorId);
+    setEditBillDate(b.billDate);
+    setEditDueDate(b.dueDate);
+    setEditStatus(b.status);
+    setEditReference(b.billReference || b.billNumber);
+    const firstLine = b.lines[0];
+    setEditProductName(firstLine?.productName || 'Raw Teak Wood Timber');
+    setEditUnitPrice(firstLine?.unitPrice || 3200);
+    setEditQuantity(firstLine?.quantity || 1);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditedBill = (e: React.FormEvent) => {
+    e.preventDefault();
+    const vendor = contacts.find((c) => c.id === editVendorId);
+    const subtotal = editQuantity * editUnitPrice;
+    const taxTotal = Number((subtotal * 0.18).toFixed(2));
+    const grandTotal = Number((subtotal + taxTotal).toFixed(2));
+
+    const existingBill = bills.find((b) => b.id === editBillId);
+    const amountPaid = editStatus === 'PAID' ? grandTotal : (existingBill?.amountPaid || 0);
+    const balanceDue = Math.max(0, grandTotal - amountPaid);
+
+    const updated = updateBill(editBillId, {
+      vendorId: editVendorId,
+      vendorName: vendor?.name || existingBill?.vendorName || 'Vendor',
+      billDate: editBillDate,
+      dueDate: editDueDate,
+      status: editStatus,
+      billReference: editReference,
+      subtotal,
+      taxTotal,
+      grandTotal,
+      amountPaid,
+      balanceDue,
+      lines: [
+        {
+          id: existingBill?.lines[0]?.id || `line-${Date.now()}`,
+          productId: existingBill?.lines[0]?.productId || 'prod-1',
+          productName: editProductName,
+          quantity: editQuantity,
+          unitPrice: editUnitPrice,
+          taxRate: 18,
+          subtotal,
+          taxAmount: taxTotal,
+          total: grandTotal,
+          chartOfAccount: 'Raw Material Purchases',
+          analyticAccountName: existingBill?.lines[0]?.analyticAccountName || 'Raw Material Procurement (Expense)',
+        },
+      ],
+    });
+
+    if (updated) {
+      setIsEditModalOpen(false);
+      if (selectedBill && selectedBill.id === editBillId) {
+        setSelectedBill(updated);
+      }
+      setNotice(`Vendor Bill ${updated.billNumber} updated successfully.`);
+      setTimeout(() => setNotice(null), 4000);
+    }
+  };
 
   useEffect(() => {
     if (!newVendorId && (eligibleVendors[0]?.id || contacts[0]?.id)) {
@@ -391,7 +469,7 @@ export function BillsPage() {
                     </div>
 
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      {b.balanceDue > 0 && !isContact && (
+                      {b.balanceDue > 0 && (
                         <Button
                           size="sm"
                           onClick={() => handleOpenPayment(b)}
@@ -400,6 +478,16 @@ export function BillsPage() {
                           <CreditCard size={11} className="mr-1" />
                           Pay
                         </Button>
+                      )}
+                      {!isContact && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditBill(b)}
+                          title="Edit Bill"
+                          className="p-1.5 rounded-md text-slate-500 hover:text-brand-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                        >
+                          <Pencil size={13} />
+                        </button>
                       )}
                       <button
                         type="button"
@@ -481,6 +569,18 @@ export function BillsPage() {
                           >
                             View
                           </Button>
+                          {!isContact && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenEditBill(b)}
+                              className="h-7 text-[11px] px-2 text-brand-700 hover:bg-brand-50 border-brand-200 cursor-pointer flex items-center gap-1"
+                              title="Edit Bill"
+                            >
+                              <Pencil size={11} />
+                              <span>Edit</span>
+                            </Button>
+                          )}
                           {b.balanceDue > 0 && !isContact && (
                             <Button
                               size="sm"
@@ -570,6 +670,18 @@ export function BillsPage() {
                   <Printer size={13} />
                   <span>Print</span>
                 </Button>
+                {!isContact && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenEditBill(selectedBill)}
+                    className="h-8 text-xs flex items-center gap-1 text-brand-700 hover:bg-brand-50 border-brand-200 cursor-pointer shadow-2xs"
+                    title="Edit Bill Details"
+                  >
+                    <Pencil size={13} />
+                    <span>Edit</span>
+                  </Button>
+                )}
                 <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
                   <X size={18} />
                 </button>
@@ -710,6 +822,17 @@ export function BillsPage() {
                 <ExternalLink size={11} />
               </Link>
               <div className="flex items-center gap-2">
+                {!isContact && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenEditBill(selectedBill)}
+                    className="text-brand-700 hover:bg-brand-50 border-brand-200 text-xs font-semibold cursor-pointer"
+                  >
+                    <Pencil size={13} className="mr-1.5" />
+                    Edit Bill
+                  </Button>
+                )}
                 {selectedBill.balanceDue > 0 && !isContact && (
                   <Button
                     size="sm"
@@ -725,6 +848,163 @@ export function BillsPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* EDIT VENDOR BILL MODAL                                       */}
+      {/* ============================================================ */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-navy-900">Edit Vendor Bill</h3>
+                <p className="text-xs text-text-muted">Modify bill parameters, amounts, and status</p>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-text-muted hover:text-navy-900 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedBill} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Vendor / Supplier *</label>
+                <select
+                  value={editVendorId}
+                  onChange={(e) => setEditVendorId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-600 focus:outline-none cursor-pointer"
+                >
+                  {contacts
+                    .filter((c) => c.type === 'VENDOR' || c.type === 'BOTH')
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.city})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Bill Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={editBillDate}
+                    onChange={(e) => setEditBillDate(e.target.value)}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Due Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Bill Reference</label>
+                  <input
+                    type="text"
+                    value={editReference}
+                    onChange={(e) => setEditReference(e.target.value)}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-brand-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Status *</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-600 focus:outline-none cursor-pointer"
+                  >
+                    <option value="DRAFT">DRAFT</option>
+                    <option value="POSTED">POSTED (Open)</option>
+                    <option value="PARTIALLY_PAID">PARTIALLY_PAID</option>
+                    <option value="PAID">PAID</option>
+                    <option value="CANCELLED">CANCELLED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Purchased Item / Material *</label>
+                <input
+                  type="text"
+                  required
+                  value={editProductName}
+                  onChange={(e) => setEditProductName(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-600 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Quantity *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editQuantity}
+                    onChange={(e) => setEditQuantity(Math.max(1, Number(e.target.value)))}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-brand-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Unit Price (₹) *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editUnitPrice}
+                    onChange={(e) => setEditUnitPrice(Number(e.target.value))}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-brand-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {(() => {
+                const subtotal = editQuantity * editUnitPrice;
+                const tax = Math.round(subtotal * 0.18);
+                const grand = subtotal + tax;
+                return (
+                  <div className="rounded-lg bg-slate-50 p-3 border border-slate-200 text-xs space-y-1 font-mono">
+                    <div className="flex justify-between text-navy-700">
+                      <span>Subtotal:</span>
+                      <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-navy-700">
+                      <span>Input GST (18%):</span>
+                      <span>₹{tax.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-navy-950 pt-1 border-t border-slate-200">
+                      <span>Grand Total:</span>
+                      <span>₹{grand.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 text-white font-semibold cursor-pointer">
+                  Save Changes
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

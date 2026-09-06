@@ -116,7 +116,42 @@ const bankJournal = Array.from(memoryJournals.values()).find((j) => j.type === '
 const debtorsAcc = Array.from(memoryAccounts.values()).find((a) => a.code === '1100') || Array.from(memoryAccounts.values())[0];
 const salesAcc = Array.from(memoryAccounts.values()).find((a) => a.code === '4000') || Array.from(memoryAccounts.values())[1];
 const bankAcc = Array.from(memoryAccounts.values()).find((a) => a.code === '1010') || Array.from(memoryAccounts.values())[0];
+const capitalAcc = Array.from(memoryAccounts.values()).find((a) => a.code === '3000' || a.type === 'CAPITAL') || salesAcc;
 const gstAcc = memoryAccounts.get(gstAccountId) || salesAcc;
+
+// Seed Entry 0: Initial Capital Contribution (1 Crore / 50 Lakhs bank float)
+const initialCapitalEntry: JournalEntryRecord = {
+  id: 'ent_seed_000',
+  journalId: bankJournal.id,
+  journalName: bankJournal.name,
+  date: '2026-09-01',
+  reference: 'JRN/2026/0000',
+  sourceType: 'CAPITAL_CONTRIBUTION',
+  status: 'POSTED',
+  lines: [
+    {
+      id: 'l_000_1',
+      accountId: bankAcc.id,
+      accountName: bankAcc.name,
+      accountCode: bankAcc.code,
+      debit: 5000000,
+      credit: 0,
+      description: 'Opening Capital Deposit into HDFC Bank Account',
+    },
+    {
+      id: 'l_000_2',
+      accountId: capitalAcc.id,
+      accountName: capitalAcc.name,
+      accountCode: capitalAcc.code,
+      debit: 0,
+      credit: 5000000,
+      description: "Owner's Equity Capital Contribution (Not a Liability)",
+    },
+  ],
+  totalDebit: 5000000,
+  totalCredit: 5000000,
+  createdAt: new Date('2026-09-01T08:00:00Z'),
+};
 
 // Seed Entry 1: Confirmed Sale Invoice (Balanced: 125,000)
 const initialEntry1: JournalEntryRecord = {
@@ -197,6 +232,7 @@ const initialEntry2: JournalEntryRecord = {
   createdAt: new Date('2026-09-03T11:30:00Z'),
 };
 
+memoryEntries.set(initialCapitalEntry.id, initialCapitalEntry);
 memoryEntries.set(initialEntry1.id, initialEntry1);
 memoryEntries.set(initialEntry2.id, initialEntry2);
 
