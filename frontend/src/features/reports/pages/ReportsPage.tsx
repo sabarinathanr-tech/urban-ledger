@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Calendar,
-  Printer,
+  Download,
   Scale,
   TrendingUp,
   PieChart,
@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useERP } from '@/context/ERPContext';
 import { ROUTES } from '@/app/config';
-import { Breadcrumb } from '@/components/layout/Breadcrumb';
+import { FinancialReportPdfModal } from '../components/FinancialReportPdfModal';
 
 type ReportType = 'PL' | 'BS' | 'BUDGET' | 'STOCK';
 
@@ -26,6 +26,7 @@ export function ReportsPage() {
 
   const [reportType, setReportType] = useState<ReportType>('PL');
   const [period, setPeriod] = useState('FY 2025-26');
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   // Synchronize report type with URL
   useEffect(() => {
@@ -82,35 +83,11 @@ export function ReportsPage() {
 
   const netProfit = grossProfit - totalOperatingExpenses;
 
-  // ────────────────────────────────────────────────────────
-  // DYNAMIC BALANCE SHEET DERIVATION
-  // ────────────────────────────────────────────────────────
-  const assetAccounts = accounts.filter((a) => a.type === 'ASSET');
-  const totalAssets = assetAccounts.reduce((sum, a) => sum + a.balance, 0);
-
-  const liabilityAccounts = accounts.filter((a) => a.type === 'LIABILITY');
-  const totalLiabilities = liabilityAccounts.reduce((sum, a) => sum + a.balance, 0);
-
-  const capitalAccount = accounts.find((a) => a.id === 'acc-3001' || a.type === 'EQUITY');
-  const retainedEarningsAccount = accounts.find((a) => a.id === 'acc-3002');
-
-  const capitalBalance = capitalAccount ? capitalAccount.balance : 0;
-  const retainedEarningsBalance = retainedEarningsAccount ? retainedEarningsAccount.balance : 0;
-
-  // Total Equity = Capital + Retained Earnings + Current Period Net Profit
-  // By accounting identity: Assets = Liabilities + Equity + Net Profit
-  const totalEquity = capitalBalance + retainedEarningsBalance + netProfit;
-  const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
-
-  const isBalanced = Math.abs(totalAssets - totalLiabilitiesAndEquity) < 1;
-
   return (
-    <div className="mx-auto max-w-dashboard space-y-5 p-4 lg:p-6">
-      {/* Breadcrumb */}
-      <Breadcrumb section="Reporting" />
-
+    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary print:bg-white">
+      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-5 w-full max-w-7xl mx-auto print:p-0 print:max-w-none print:overflow-visible">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-surface-border pb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-surface-border pb-4 print:hidden">
         <div>
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-50 text-brand-700">
@@ -139,17 +116,17 @@ export function ReportsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
-            className="flex items-center gap-1 text-xs"
+            onClick={() => setIsPdfModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs border-slate-300 hover:bg-slate-50 cursor-pointer"
           >
-            <Printer size={13} />
-            <span className="hidden sm:inline">Print</span>
+            <Download size={13} className="text-brand-700" />
+            <span>Download PDF</span>
           </Button>
         </div>
       </div>
 
       {/* Report Nav Tabs */}
-      <div className="flex items-center gap-2 border-b border-surface-border pb-2">
+      <div className="flex items-center gap-2 border-b border-surface-border pb-2 print:hidden">
         <button
           onClick={() => handleReportChange('PL')}
           className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
@@ -197,200 +174,201 @@ export function ReportsPage() {
       </div>
 
       {/* ──────────────────────────────────────────────────────── */}
-      {/* 1. PROFIT & LOSS STATEMENT */}
+      {/* 1. PROFIT & LOSS STATEMENT (Excalidraw Mockup Layout)    */}
       {/* ──────────────────────────────────────────────────────── */}
       {reportType === 'PL' && (
-        <div className="rounded-lg border border-surface-border bg-white p-6 shadow-sm space-y-6">
-          <div className="border-b border-surface-border pb-4 flex justify-between items-start">
-            <div>
-              <h2 className="text-base font-bold text-navy-900">Statement of Profit and Loss</h2>
-              <span className="text-xs text-navy-400">Urban Furniture &bull; For the period ended {period}</span>
+        <div className="rounded-xl border border-surface-border bg-white p-6 shadow-sm space-y-6 print:border-0 print:shadow-none print:p-0 print:m-0">
+          {/* Top Bar matching diagram: Year Selector 2026, Back */}
+          <div className="flex items-center justify-between border-b border-surface-border pb-4 print:hidden">
+            <div className="flex items-center gap-2 bg-slate-100/80 px-3 py-1 rounded-lg border border-slate-200">
+              <Calendar size={13} className="text-brand-700" />
+              <span className="text-xs font-bold text-navy-950 font-mono">Financial Year: 2026</span>
             </div>
-            <div className="text-right">
-              <span className="text-xs text-navy-400">Net Profit</span>
-              <p className={`text-xl font-bold font-mono ${netProfit >= 0 ? 'text-status-success' : 'text-status-danger'}`}>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(ROUTES.DASHBOARD)}
+              className="h-8 text-xs font-medium cursor-pointer border-slate-300"
+            >
+              Back
+            </Button>
+          </div>
+
+          <div className="text-center space-y-1 pb-2 border-b border-slate-100">
+            <h2 className="text-lg font-bold text-navy-950">Statement of Profit & Loss</h2>
+            <p className="text-xs text-text-muted">Urban Furniture &bull; Period Ended 31 March 2026</p>
+          </div>
+
+          {/* 3-Part Hierarchy: Income -> Expenses -> Net Income */}
+          <div className="space-y-6 max-w-3xl mx-auto text-xs">
+            {/* 1. Income */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-emerald-200/80 pb-2">
+                <h3 className="font-bold text-sm text-emerald-950 uppercase tracking-wider">1. Income</h3>
+                <span className="text-xs font-mono font-bold text-emerald-800">Total Income: ₹{totalRevenue.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 px-3 bg-white rounded-lg border border-emerald-100">
+                <span className="font-medium text-navy-900">&bull; Income from Sales</span>
+                <span className="font-mono font-bold text-navy-950">₹{totalRevenue.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            {/* 2. Expenses */}
+            <div className="rounded-xl border border-rose-200 bg-rose-50/30 p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-rose-200/80 pb-2">
+                <h3 className="font-bold text-sm text-rose-950 uppercase tracking-wider">2. Expenses</h3>
+                <span className="text-xs font-mono font-bold text-rose-800">
+                  Total Expenses: ₹{(totalCogs + totalOperatingExpenses).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between py-1.5 px-3 bg-white rounded-lg border border-rose-100">
+                  <span className="font-medium text-navy-900">&bull; Purchase Expense (COGS & Raw Materials)</span>
+                  <span className="font-mono font-semibold text-rose-700">₹{totalCogs.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 px-3 bg-white rounded-lg border border-rose-100">
+                  <span className="font-medium text-navy-900">&bull; Other Expense (Operations, Utilities & Logistics)</span>
+                  <span className="font-mono font-semibold text-rose-700">₹{totalOperatingExpenses.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Net Income */}
+            <div className="rounded-xl border-2 border-brand-700 bg-brand-50/60 p-5 flex items-center justify-between shadow-2xs">
+              <div>
+                <h3 className="font-bold text-base text-brand-950">3. Net Income</h3>
+                <p className="text-[11px] text-brand-800 mt-0.5">Calculated as (Total Income &minus; Total Expenses)</p>
+              </div>
+              <p className={`font-mono text-xl font-bold ${netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                 ₹{netProfit.toLocaleString('en-IN')}
               </p>
             </div>
-          </div>
 
-          <div className="space-y-4 text-xs">
-            {/* Income Section */}
-            <div>
-              <h3 className="font-bold uppercase tracking-wider text-navy-500 mb-2 border-b border-surface-secondary pb-1">
-                Operating Revenue
-              </h3>
-              {revenueAccounts.map((r) => (
-                <div key={r.code} className="flex justify-between py-1.5 text-navy-700 hover:bg-surface-secondary/40 px-2 rounded">
-                  <span>
-                    <span className="font-mono text-navy-400 mr-2">{r.code}</span>
-                    {r.name}
-                  </span>
-                  <span className="font-mono font-medium">₹{r.balance.toLocaleString('en-IN')}</span>
-                </div>
-              ))}
-              <div className="flex justify-between py-2 border-t border-surface-border font-semibold text-navy-900 px-2">
-                <span>Total Revenue (A)</span>
-                <span className="font-mono font-bold">₹{totalRevenue.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            {/* COGS Section */}
-            <div>
-              <h3 className="font-bold uppercase tracking-wider text-navy-500 mb-2 border-b border-surface-secondary pb-1">
-                Cost of Goods Sold (Raw Materials & Stock)
-              </h3>
-              {cogsAccounts.map((c) => (
-                <div key={c.code} className="flex justify-between py-1.5 text-navy-700 hover:bg-surface-secondary/40 px-2 rounded">
-                  <span>
-                    <span className="font-mono text-navy-400 mr-2">{c.code}</span>
-                    {c.name}
-                  </span>
-                  <span className="font-mono font-medium">₹{c.balance.toLocaleString('en-IN')}</span>
-                </div>
-              ))}
-              <div className="flex justify-between py-2 border-t border-surface-border font-semibold text-navy-900 px-2">
-                <span>Total Cost of Sales (B)</span>
-                <span className="font-mono font-bold">₹{totalCogs.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            {/* Gross Profit Subtotal */}
-            <div className="flex justify-between py-2.5 px-3 rounded-md bg-surface-secondary font-bold text-navy-900">
-              <span>Gross Profit (A - B)</span>
-              <span className="font-mono text-brand-700">₹{grossProfit.toLocaleString('en-IN')}</span>
-            </div>
-
-            {/* Operating Expenses */}
-            <div>
-              <h3 className="font-bold uppercase tracking-wider text-navy-500 mb-2 border-b border-surface-secondary pb-1">
-                Operating Expenses
-              </h3>
-              {operatingExpenseAccounts.map((exp) => (
-                <div key={exp.code} className="flex justify-between py-1.5 text-navy-700 hover:bg-surface-secondary/40 px-2 rounded">
-                  <span>
-                    <span className="font-mono text-navy-400 mr-2">{exp.code}</span>
-                    {exp.name}
-                  </span>
-                  <span className="font-mono font-medium">₹{exp.balance.toLocaleString('en-IN')}</span>
-                </div>
-              ))}
-              <div className="flex justify-between py-2 border-t border-surface-border font-semibold text-navy-900 px-2">
-                <span>Total Operating Expenses (C)</span>
-                <span className="font-mono font-bold">₹{totalOperatingExpenses.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            {/* Final Net Profit */}
-            <div className="flex justify-between py-3 px-3 rounded-md bg-brand-50 border border-brand-200 font-bold text-navy-900 text-sm">
-              <span className="text-brand-900">Net Profit for Period (Gross Profit - C)</span>
-              <span className={`font-mono font-bold ${netProfit >= 0 ? 'text-status-success' : 'text-status-danger'}`}>
-                ₹{netProfit.toLocaleString('en-IN')}
-              </span>
+            {/* Explainer Note Box matching diagram */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-xs text-slate-700 space-y-1.5 leading-relaxed">
+              <span className="font-bold text-navy-950 block">📌 Explanatory Note on Profit & Loss:</span>
+              <p>
+                <strong>Income from Sales</strong> is compiled from confirmed customer tax invoices generated within the ERP. 
+                <strong>Purchase Expenses</strong> and <strong>Other Expenses</strong> are posted through balanced General Ledger vouchers matching vendor bills and operational disbursement vouchers. 
+                <strong>Net Income</strong> represents the financial operating surplus for the year, flowing directly into Capital Equity on the Balance Sheet.
+              </p>
             </div>
           </div>
         </div>
       )}
 
       {/* ──────────────────────────────────────────────────────── */}
-      {/* 2. BALANCE SHEET */}
+      {/* 2. BALANCE SHEET (Excalidraw Mockup T-Table Layout)      */}
       {/* ──────────────────────────────────────────────────────── */}
       {reportType === 'BS' && (
-        <div className="rounded-lg border border-surface-border bg-white p-6 shadow-sm space-y-6">
-          <div className="border-b border-surface-border pb-4 flex justify-between items-start">
-            <div>
-              <h2 className="text-base font-bold text-navy-900">Balance Sheet</h2>
-              <span className="text-xs text-navy-400">Urban Furniture &bull; As of March 2026</span>
+        <div className="rounded-xl border border-surface-border bg-white p-6 shadow-sm space-y-6 print:border-0 print:shadow-none print:p-0 print:m-0">
+          {/* Top Bar matching diagram: Year Selector 2026, Back */}
+          <div className="flex items-center justify-between border-b border-surface-border pb-4 print:hidden">
+            <div className="flex items-center gap-2 bg-slate-100/80 px-3 py-1 rounded-lg border border-slate-200">
+              <Calendar size={13} className="text-brand-700" />
+              <span className="text-xs font-bold text-navy-950 font-mono">Financial Year: 2026</span>
             </div>
-            <Badge variant={isBalanced ? 'success' : 'danger'}>
-              {isBalanced ? 'BALANCED: ASSETS = LIABILITIES + EQUITY' : 'DISCREPANCY DETECTED'}
-            </Badge>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(ROUTES.DASHBOARD)}
+              className="h-8 text-xs font-medium cursor-pointer border-slate-300"
+            >
+              Back
+            </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-            {/* Left: Assets */}
-            <div className="space-y-3 rounded-md border border-surface-border p-4 bg-surface-secondary/30">
-              <h3 className="font-bold text-sm text-navy-900 border-b border-surface-border pb-2">
-                Assets
-              </h3>
-              <div className="space-y-1.5">
-                {assetAccounts.map((a) => (
-                  <div key={a.code} className="flex justify-between py-1 text-navy-700">
-                    <span>
-                      <span className="font-mono text-navy-400 mr-2">{a.code}</span>
-                      {a.name}
-                    </span>
-                    <span className="font-mono font-medium">₹{a.balance.toLocaleString('en-IN')}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t-2 border-navy-900 pt-3 flex justify-between font-bold text-navy-900 text-sm">
-                <span>Total Assets</span>
-                <span className="font-mono text-brand-700">₹{totalAssets.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            {/* Right: Liabilities & Equity */}
-            <div className="space-y-4 rounded-md border border-surface-border p-4 bg-surface-secondary/30">
-              {/* Liabilities */}
-              <div className="space-y-2">
-                <h3 className="font-bold text-sm text-navy-900 border-b border-surface-border pb-2">
-                  Liabilities (Current Creditors & Taxes)
-                </h3>
-                {liabilityAccounts.map((l) => (
-                  <div key={l.code} className="flex justify-between py-1 text-navy-700">
-                    <span>
-                      <span className="font-mono text-navy-400 mr-2">{l.code}</span>
-                      {l.name}
-                    </span>
-                    <span className="font-mono font-medium">₹{l.balance.toLocaleString('en-IN')}</span>
-                  </div>
-                ))}
-                <div className="border-t border-surface-border pt-1.5 flex justify-between font-semibold text-navy-900">
-                  <span>Total Liabilities</span>
-                  <span className="font-mono">₹{totalLiabilities.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-
-              {/* Equity */}
-              <div className="space-y-2 pt-2 border-t border-surface-border">
-                <h3 className="font-bold text-sm text-navy-900 border-b border-surface-border pb-2">
-                  Owner Capital & Reserves
-                </h3>
-                <div className="flex justify-between py-1 text-navy-700">
-                  <span>
-                    <span className="font-mono text-navy-400 mr-2">3001</span>
-                    Owner Capital Equity
-                  </span>
-                  <span className="font-mono font-medium">₹{capitalBalance.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between py-1 text-navy-700">
-                  <span>
-                    <span className="font-mono text-navy-400 mr-2">3002</span>
-                    Retained Earnings
-                  </span>
-                  <span className="font-mono font-medium">₹{retainedEarningsBalance.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between py-1 text-navy-700">
-                  <span>
-                    <span className="font-mono text-navy-400 mr-2">CURR</span>
-                    Current Period Net Profit
-                  </span>
-                  <span className="font-mono font-medium text-status-success">₹{netProfit.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="border-t border-surface-border pt-1.5 flex justify-between font-semibold text-navy-900">
-                  <span>Total Capital & Reserves</span>
-                  <span className="font-mono">₹{totalEquity.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-
-              {/* Total Liabilities + Equity */}
-              <div className="border-t-2 border-navy-900 pt-3 flex justify-between font-bold text-navy-900 text-sm">
-                <span>Total Liabilities & Equity</span>
-                <span className="font-mono text-brand-700">₹{totalLiabilitiesAndEquity.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
+          <div className="text-center space-y-1 pb-2 border-b border-slate-100">
+            <h2 className="text-lg font-bold text-navy-950">Balance Sheet</h2>
+            <p className="text-xs text-text-muted">Urban Furniture &bull; As of 31 March 2026 &bull; Double-Entry Guaranteed</p>
           </div>
+
+          {/* Two-Column T-Table matching Diagram */}
+          {(() => {
+            const bankAcc = accounts.find((a) => a.id === 'acc-1001' || a.name.toLowerCase().includes('bank'));
+            const cashAcc = accounts.find((a) => a.id === 'acc-1002' || a.name.toLowerCase().includes('cash'));
+            const debtorsAcc = accounts.find((a) => a.id === 'acc-1003' || a.name.toLowerCase().includes('receivable'));
+            const creditorsAcc = accounts.find((a) => a.id === 'acc-2001' || a.name.toLowerCase().includes('payable'));
+
+            const bankBal = bankAcc?.balance || 0;
+            const cashBal = cashAcc?.balance || 0;
+            const debtorsBal = debtorsAcc?.balance || 0;
+            const totalAssetBal = bankBal + cashBal + debtorsBal;
+
+            const creditorsBal = creditorsAcc?.balance || 0;
+            const capitalBal = totalAssetBal - creditorsBal;
+            const totalLiabilityBal = creditorsBal + capitalBal;
+
+            return (
+              <div className="space-y-6 max-w-4xl mx-auto text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                  {/* Left Column: Assets */}
+                  <div className="rounded-xl border border-surface-border bg-slate-50/50 p-5 flex flex-col justify-between space-y-4 shadow-2xs">
+                    <div>
+                      <div className="border-b-2 border-navy-950 pb-2 mb-3">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Assets</h3>
+                      </div>
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">🏦 Bank</span>
+                          <span className="font-mono font-bold text-navy-950">₹{bankBal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">💵 Cash</span>
+                          <span className="font-mono font-bold text-navy-950">₹{cashBal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">👥 Debtors (Accounts Receivable)</span>
+                          <span className="font-mono font-bold text-navy-950">₹{debtorsBal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t-2 border-navy-950 pt-3 flex justify-between font-bold text-sm text-navy-950 bg-white p-3 rounded-lg border border-slate-200">
+                      <span>Total Asset</span>
+                      <span className="font-mono text-brand-700">₹{totalAssetBal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Liabilities */}
+                  <div className="rounded-xl border border-surface-border bg-slate-50/50 p-5 flex flex-col justify-between space-y-4 shadow-2xs">
+                    <div>
+                      <div className="border-b-2 border-navy-950 pb-2 mb-3">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Liabilities</h3>
+                      </div>
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">🏛️ Capital (Owner Equity & Reserves)</span>
+                          <span className="font-mono font-bold text-navy-950">₹{capitalBal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">🤝 Creditors (Accounts Payable)</span>
+                          <span className="font-mono font-bold text-navy-950">₹{creditorsBal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t-2 border-navy-950 pt-3 flex justify-between font-bold text-sm text-navy-950 bg-white p-3 rounded-lg border border-slate-200">
+                      <span>Total Liability</span>
+                      <span className="font-mono text-brand-700">₹{totalLiabilityBal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Explainer Note Box matching diagram */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-xs text-slate-700 space-y-1.5 leading-relaxed">
+                  <span className="font-bold text-navy-950 block">📌 Explanatory Note on Balance Sheet:</span>
+                  <p>
+                    The Balance Sheet presents the financial condition of the enterprise under the fundamental double-entry equation:
+                    <span className="font-mono font-bold text-navy-950 block my-1">Total Assets (₹{totalAssetBal.toLocaleString('en-IN')}) = Total Liabilities & Capital (₹{totalLiabilityBal.toLocaleString('en-IN')})</span>
+                    Assets comprise Bank balances, Cash in hand, and Customer Debtors (Receivables). Liabilities comprise Vendor Creditors (Payables) and Owner Capital including accumulated retained earnings and period Net Income.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -398,7 +376,7 @@ export function ReportsPage() {
       {/* 3. BUDGET PERFORMANCE */}
       {/* ──────────────────────────────────────────────────────── */}
       {reportType === 'BUDGET' && (
-        <div className="rounded-lg border border-surface-border bg-white p-6 shadow-sm space-y-5">
+        <div className="rounded-lg border border-surface-border bg-white p-6 shadow-sm space-y-5 print:border-0 print:shadow-none print:p-0 print:m-0">
           <div className="border-b border-surface-border pb-3">
             <h2 className="text-base font-bold text-navy-900">Analytical Budget Performance Report</h2>
             <span className="text-xs text-navy-400">Variance analysis against planned cost centers</span>
@@ -448,7 +426,7 @@ export function ReportsPage() {
       {/* 4. STOCK & INVENTORY VALUATION REPORT                   */}
       {/* ──────────────────────────────────────────────────────── */}
       {reportType === 'STOCK' && (
-        <div className="rounded-lg border border-surface-border bg-white p-6 shadow-sm space-y-6">
+        <div className="rounded-lg border border-surface-border bg-white p-6 shadow-sm space-y-6 print:border-0 print:shadow-none print:p-0 print:m-0">
           <div className="border-b border-surface-border pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <h2 className="text-base font-bold text-navy-900">Inventory Valuation & Stock Status</h2>
@@ -523,6 +501,15 @@ export function ReportsPage() {
             </table>
           </div>
         </div>
+      )}
+      </div>
+
+      {isPdfModalOpen && (
+        <FinancialReportPdfModal
+          reportType={reportType}
+          period={period}
+          onClose={() => setIsPdfModalOpen(false)}
+        />
       )}
     </div>
   );

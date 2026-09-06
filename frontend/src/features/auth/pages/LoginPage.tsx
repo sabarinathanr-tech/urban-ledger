@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -24,21 +24,34 @@ export const LoginPage: React.FC = () => {
     message: '',
   });
 
-  // Return to intended page or dashboard
-  const destination = (location.state as { from?: { pathname?: string } })?.from?.pathname || ROUTES.DASHBOARD;
+  const locationState = location.state as { from?: { pathname?: string }; registeredEmail?: string } | null;
+  const destination = locationState?.from?.pathname || ROUTES.DASHBOARD;
+  const initialEmail = locationState?.registeredEmail || '';
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
+      email: initialEmail,
       password: '',
       rememberMe: false,
     },
   });
+
+  useEffect(() => {
+    if (initialEmail) {
+      setValue('email', initialEmail);
+      setApiStatus({
+        type: 'success',
+        message: 'Account Created Successfully!',
+        details: `Your customer portal account for ${initialEmail} is ready. Enter your password to sign in.`,
+      });
+    }
+  }, [initialEmail, setValue]);
 
   const onSubmit = async (data: LoginFormValues) => {
     setApiStatus({ type: 'idle', message: '' });

@@ -17,7 +17,6 @@ import {
   ChevronDown,
   Menu,
   X,
-  RotateCcw,
   Search,
   CheckCircle2,
   Armchair,
@@ -55,7 +54,6 @@ export function AppLayout() {
   const [profileTab, setProfileTab] = useState<'profile' | 'permissions'>('profile');
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
-  const [resetNotice, setResetNotice] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -63,7 +61,7 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isContact, isAdmin } = useAuth();
-  const { ledgerEquality, resetDemoData } = useERP();
+  const { ledgerEquality } = useERP();
 
   const isCustomerContact = isContact && (user?.contactType === 'CUSTOMER' || user?.contactType === 'BOTH' || !user?.contactType);
   const isVendorContact = isContact && (user?.contactType === 'VENDOR' || user?.contactType === 'BOTH');
@@ -106,17 +104,6 @@ export function AppLayout() {
     setProfileDropdownOpen(false);
     setMobileMenuOpen(false);
   }, [location.pathname]);
-
-  const handleResetData = () => {
-    const confirmation = window.prompt(
-      'Type RESET to clear and reset the application dataset to initial state:'
-    );
-    if (confirmation === 'RESET') {
-      resetDemoData();
-      setResetNotice(true);
-      setTimeout(() => setResetNotice(false), 3500);
-    }
-  };
 
   // ERP Top Menu Definitions
   const TOP_MENUS: TopMenuSection[] = isContact
@@ -345,10 +332,10 @@ export function AppLayout() {
             {/* Brand Logo & Name */}
             <Link
               to={ROUTES.DASHBOARD}
-              className="flex items-center gap-2 font-bold tracking-tight text-white hover:opacity-95 transition-opacity"
+              className="flex items-center gap-2.5 font-bold tracking-tight text-white hover:opacity-95 transition-opacity"
             >
-              <div className="w-7 h-7 rounded-md bg-white/20 text-white flex items-center justify-center font-black text-sm shadow-xs border border-white/20">
-                <Armchair size={16} />
+              <div className="w-7 h-7 rounded-md bg-white p-0.5 flex items-center justify-center shadow-xs border border-white/20 overflow-hidden">
+                <img src="/logo-light.png" alt="Urban Ledger" className="w-full h-full object-contain" />
               </div>
               <span className="font-bold text-sm tracking-tight text-white">
                 {APP_CONFIG.name}
@@ -358,25 +345,41 @@ export function AppLayout() {
 
           {/* Center: Main Navigation Menu (Desktop) */}
           <nav ref={dropdownRef} className="hidden lg:flex items-center gap-1 mx-4">
-            {/* Dashboard Direct Tab */}
-            <NavLink
-              to={ROUTES.DASHBOARD}
-              end
-              className={({ isActive }) =>
-                cn(
-                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
-                  isActive
-                    ? 'bg-black/20 text-white font-semibold shadow-xs'
-                    : 'text-purple-100 hover:text-white hover:bg-white/15'
-                )
-              }
-            >
-              Dashboard
-            </NavLink>
+            {/* Dashboard Direct Tab (Internal Admin/Accountant Only) */}
+            {!isContact && (
+              <NavLink
+                to={ROUTES.DASHBOARD}
+                end
+                className={({ isActive }) =>
+                  cn(
+                    'px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                    isActive
+                      ? 'bg-black/20 text-white font-semibold shadow-xs'
+                      : 'text-purple-100 hover:text-white hover:bg-white/15'
+                  )
+                }
+              >
+                Dashboard
+              </NavLink>
+            )}
 
             {/* Contact Portal Direct Tabs (Strictly Role & Type Scoped) */}
             {isContact && (
               <>
+                <NavLink
+                  to={ROUTES.DASHBOARD}
+                  end
+                  className={({ isActive }) =>
+                    cn(
+                      'px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                      isActive
+                        ? 'bg-black/20 text-white font-semibold shadow-xs'
+                        : 'text-purple-100 hover:text-white hover:bg-white/15'
+                    )
+                  }
+                >
+                  Dashboard
+                </NavLink>
                 {isCustomerContact && (
                   <NavLink
                     to={ROUTES.INVOICES}
@@ -544,18 +547,7 @@ export function AppLayout() {
               </Link>
             )}
 
-            {/* Demo Reset Shortcut (Admin only) */}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={handleResetData}
-                title="Reset sample business data to fresh initial seed state"
-                className="hidden xl:flex items-center gap-1 px-2 py-1 rounded text-xs text-purple-200 hover:text-white hover:bg-white/15 transition-colors cursor-pointer"
-              >
-                <RotateCcw size={13} />
-                <span className="text-[11px]">Reset Data</span>
-              </button>
-            )}
+
 
             {/* User Avatar with Dropdown */}
             <div ref={profileRef} className="relative">
@@ -617,18 +609,20 @@ export function AppLayout() {
                       <span>My Profile</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProfileDropdownOpen(false);
-                        setProfileTab('permissions');
-                        setProfileOpen(true);
-                      }}
-                      className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-navy-800 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-                    >
-                      <ShieldCheck size={14} className="text-slate-500" />
-                      <span>Permissions</span>
-                    </button>
+                    {!isContact && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          setProfileTab('permissions');
+                          setProfileOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-navy-800 hover:bg-slate-50 transition-colors cursor-pointer text-left"
+                      >
+                        <ShieldCheck size={14} className="text-slate-500" />
+                        <span>Permissions</span>
+                      </button>
+                    )}
 
                     {isAdmin && (
                       <Link
@@ -641,19 +635,7 @@ export function AppLayout() {
                       </Link>
                     )}
 
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProfileDropdownOpen(false);
-                          handleResetData();
-                        }}
-                        className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-navy-800 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-                      >
-                        <RotateCcw size={14} className="text-slate-500" />
-                        <span>Reset Demo Data</span>
-                      </button>
-                    )}
+
                   </div>
 
                   <div className="pt-1 border-t border-slate-100">
@@ -675,16 +657,26 @@ export function AppLayout() {
         {/* Mobile Navigation Drawer (Collapsible Accordion) */}
         {mobileMenuOpen && (
           <div className="lg:hidden bg-[#5E3B55] border-t border-[#4E3047] px-4 py-3 space-y-3 animate-in slide-in-from-top duration-150 max-h-[80vh] overflow-y-auto">
-            <NavLink
-              to={ROUTES.DASHBOARD}
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 rounded-md text-sm font-medium text-white hover:bg-white/15"
-            >
-              Dashboard
-            </NavLink>
+            {!isContact && (
+              <NavLink
+                to={ROUTES.DASHBOARD}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-md text-sm font-medium text-white hover:bg-white/15"
+              >
+                Dashboard
+              </NavLink>
+            )}
 
             {isContact ? (
               <>
+                <NavLink
+                  to={ROUTES.DASHBOARD}
+                  end
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2 rounded-md text-sm text-purple-100 hover:text-white hover:bg-white/10"
+                >
+                  Dashboard
+                </NavLink>
                 {isCustomerContact && (
                   <NavLink
                     to={ROUTES.INVOICES}
@@ -745,17 +737,19 @@ export function AppLayout() {
                 >
                   <User size={14} /> Profile
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    setProfileTab('permissions');
-                    setProfileOpen(true);
-                  }}
-                  className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ShieldCheck size={14} /> Permissions
-                </button>
+                {!isContact && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setProfileTab('permissions');
+                      setProfileOpen(true);
+                    }}
+                    className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ShieldCheck size={14} /> Permissions
+                  </button>
+                )}
               </div>
               <button
                 type="button"
@@ -769,13 +763,7 @@ export function AppLayout() {
         )}
       </header>
 
-      {/* Demo Reset Notification Toast */}
-      {resetNotice && (
-        <div className="fixed bottom-4 right-4 z-50 bg-navy-900 text-white px-4 py-2.5 rounded-lg shadow-xl border border-slate-700 flex items-center gap-2 text-xs animate-in fade-in slide-in-from-bottom-2">
-          <CheckCircle2 size={16} className="text-emerald-400" />
-          <span>Demo dataset and financial books reset successfully.</span>
-        </div>
-      )}
+
 
       {/* Contact Portal Restricted Notice */}
       {isContact &&
@@ -804,7 +792,7 @@ export function AppLayout() {
         )}
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 bg-surface-secondary">
         <Outlet />
       </main>
 

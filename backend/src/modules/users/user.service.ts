@@ -44,22 +44,23 @@ export class UserService {
   public async createUser(input: CreateUserInput): Promise<UserResponse> {
     const normalizedEmail = input.email.toLowerCase().trim();
 
-    // Check duplicate email
+    // Check duplicate email in both DB and in-memory store
     let existingUser = null;
     if (isDatabaseAvailable()) {
       try {
         existingUser = await prisma.user.findUnique({
           where: { email: normalizedEmail },
         });
-      } catch {
-        existingUser = Array.from(memoryUsers.values()).find((u) => u.email === normalizedEmail) || null;
+      } catch (err) {
+        logger.warn('Prisma findUnique error during email check:', err instanceof Error ? err.message : String(err));
       }
-    } else {
-      existingUser = Array.from(memoryUsers.values()).find((u) => u.email === normalizedEmail) || null;
+    }
+    if (!existingUser) {
+      existingUser = Array.from(memoryUsers.values()).find((u) => u.email.toLowerCase().trim() === normalizedEmail) || null;
     }
 
     if (existingUser) {
-      throw new ConflictError('An account with this email already exists.', ERROR_CODES.USER_EXISTS);
+      throw new ConflictError('An account with this email address already exists. Please use a different email or log in.', ERROR_CODES.USER_EXISTS);
     }
 
     const saltRounds = 10;
@@ -96,8 +97,35 @@ export class UserService {
           },
         });
 
-        return this.sanitizeUser(user);
-      } catch (error) {
+        const sanitized = this.sanitizeUser(user);
+        memoryUsers.set(user.id, {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          mobile: user.mobile,
+          passwordHash: user.passwordHash,
+          role: user.role as Role,
+          status: user.isActive ? 'ACTIVE' : 'INACTIVE',
+          contact: user.contact
+            ? {
+                id: user.contact.id,
+                name: user.contact.name,
+                email: user.contact.email,
+                mobile: user.contact.mobile,
+                type: user.contact.type,
+                status: user.contact.isActive ? 'ACTIVE' : 'INACTIVE',
+              }
+            : null,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        });
+        return sanitized;
+      } catch (error: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const errAny = error as any;
+        if (errAny?.code === 'P2002' || errAny?.message?.includes('Unique constraint') || errAny?.message?.includes('users_email_key')) {
+          throw new ConflictError('An account with this email address already exists. Please choose a different email address.', ERROR_CODES.USER_EXISTS);
+        }
         logger.warn('Prisma createUser failed, falling back to memory store:', error instanceof Error ? error.message : String(error));
         return this.createMemoryUser(input, normalizedEmail, mobile, passwordHash, role, isContact, contactType);
       }

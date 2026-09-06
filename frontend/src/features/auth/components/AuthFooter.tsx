@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 interface AuthFooterProps {
@@ -9,7 +9,7 @@ export const AuthFooter: React.FC<AuthFooterProps> = ({ className }) => {
   return (
     <footer
       className={cn(
-        'mt-6 pt-4 border-t border-slate-200/70 dark:border-slate-800 text-center text-[11px] text-slate-500 dark:text-slate-400 space-y-1',
+        'mt-auto pt-4 border-t border-slate-200/70 dark:border-slate-800 text-center text-[11px] text-slate-500 dark:text-slate-400 space-y-1',
         className
       )}
     >

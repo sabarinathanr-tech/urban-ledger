@@ -1,5 +1,7 @@
-import React from 'react';
-import { Printer, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Printer, Download, X, Loader2 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { Button } from '@/components/ui/button';
 
 export interface PrintableDocumentItem {
@@ -54,8 +56,56 @@ export const TaxInvoiceDocument: React.FC<PrintableDocumentProps> = ({
   const isInvoice = documentType === 'INVOICE';
   const halfTax = Number((taxTotal / 2).toFixed(2));
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    setIsDownloading(true);
+    try {
+      const element = document.getElementById('printable-voucher');
+      if (!element) throw new Error('Voucher element not found');
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const cleanFilename = `${isInvoice ? 'Invoice' : 'Bill'}_${documentNumber.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+      pdf.save(cleanFilename);
+    } catch (err) {
+      console.error('Invoice PDF download error:', err);
+      window.print();
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -75,13 +125,23 @@ export const TaxInvoiceDocument: React.FC<PrintableDocumentProps> = ({
             <Button
               variant="primary"
               size="sm"
+              onClick={handleDownloadPdf}
+              disabled={isDownloading}
+              className="flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 text-white cursor-pointer"
+            >
+              {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              <span>{isDownloading ? 'Downloading...' : 'Download PDF'}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800"
+              className="flex items-center gap-1.5 cursor-pointer"
             >
               <Printer size={14} />
-              <span>Print / Save PDF</span>
+              <span>Print</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={onClose} className="h-8 w-8 p-0">
+            <Button variant="outline" size="sm" onClick={onClose} className="h-8 w-8 p-0 cursor-pointer">
               <X size={16} />
             </Button>
           </div>

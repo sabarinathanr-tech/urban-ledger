@@ -37,7 +37,11 @@ function IndexRedirect() {
     );
   }
 
-  return <Navigate to={isAuthenticated ? ROUTES.DASHBOARD : ROUTES.LOGIN} replace />;
+  if (!isAuthenticated) {
+    return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  return <Navigate to={ROUTES.DASHBOARD} replace />;
 }
 
 export function AppRoutes() {

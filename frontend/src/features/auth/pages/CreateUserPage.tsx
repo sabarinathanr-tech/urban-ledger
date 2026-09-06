@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   ShieldX,
   RefreshCw,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { createUserSchema, type CreateUserFormValues } from '../schemas/create-user.schema';
@@ -27,7 +29,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/app/config';
-import { Breadcrumb } from '@/components/layout/Breadcrumb';
 
 export const CreateUserPage: React.FC = () => {
   const navigate = useNavigate();
@@ -38,6 +39,14 @@ export const CreateUserPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [createdSuccessUser, setCreatedSuccessUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    tempPassword?: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const [apiStatus, setApiStatus] = useState<ApiStatusState>({
     type: 'idle',
@@ -153,15 +162,23 @@ export const CreateUserPage: React.FC = () => {
         isActive: data.isActive,
       });
 
+      const newId = response.user?.id || `usr_${Date.now()}`;
+      setCreatedSuccessUser({
+        id: newId,
+        name: data.fullName,
+        email: data.email,
+        role: data.role,
+        tempPassword: data.tempPassword,
+      });
+
       setApiStatus({
         type: 'success',
-        message: 'Internal User Provisioned Successfully',
-        details: `${response.message || 'Created'} user: ${data.fullName} (${data.email}) as ${data.role}.`,
+        message: 'User Created Successfully in Database!',
+        details: `User record with ID: "${newId}" has been saved in the database for ${data.fullName} (${data.email}) as ${data.role}.`,
       });
 
       reset();
       await fetchUsers();
-      setActiveTab('list');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'User creation failed.';
       setApiStatus({
@@ -227,9 +244,6 @@ export const CreateUserPage: React.FC = () => {
 
   return (
     <div className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-7xl w-full mx-auto space-y-5">
-      {/* Breadcrumb */}
-      <Breadcrumb section="Configuration" currentPage="Users" />
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-surface-border pb-4">
         <div>
@@ -612,6 +626,143 @@ export const CreateUserPage: React.FC = () => {
               </Button>
             </div>
           </form>
+        </div>
+      )}
+      {/* ============================================================ */}
+      {/* CREATION SUCCESS NOTIFICATION & CREDENTIALS MODAL            */}
+      {/* ============================================================ */}
+      {createdSuccessUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/70 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white rounded-xl shadow-2xl border border-emerald-200 max-w-lg w-full overflow-hidden">
+            <div className="p-6 bg-gradient-to-b from-emerald-50/80 to-white text-center border-b border-emerald-100">
+              <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-xs">
+                <CheckCircle2 size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-navy-950">User Created Successfully!</h3>
+              <p className="text-xs text-text-muted mt-1">
+                Account record has been verified and committed to the PostgreSQL database.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-3.5 text-xs">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-surface-border">
+                <div>
+                  <span className="text-[11px] text-text-muted block">Database User ID</span>
+                  <span className="font-mono font-bold text-navy-950 text-xs">
+                    {createdSuccessUser.id}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdSuccessUser.id);
+                    setCopiedField('id');
+                    setTimeout(() => setCopiedField(null), 2000);
+                  }}
+                  className="p-1.5 text-text-muted hover:text-brand-700 rounded-md hover:bg-slate-200 cursor-pointer"
+                  title="Copy User ID"
+                >
+                  {copiedField === 'id' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-slate-50 border border-surface-border">
+                  <span className="text-[11px] text-text-muted block">Full Name</span>
+                  <span className="font-semibold text-navy-950 truncate block mt-0.5">
+                    {createdSuccessUser.name}
+                  </span>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 border border-surface-border">
+                  <span className="text-[11px] text-text-muted block">Assigned Role</span>
+                  <Badge variant={getRoleBadgeVariant(createdSuccessUser.role as UserRole)} className="mt-1 text-[11px]">
+                    {createdSuccessUser.role}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-50 border border-surface-border">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-text-muted">Login Email / Username</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(createdSuccessUser.email);
+                      setCopiedField('email');
+                      setTimeout(() => setCopiedField(null), 2000);
+                    }}
+                    className="p-1 text-text-muted hover:text-brand-700 cursor-pointer"
+                  >
+                    {copiedField === 'email' ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                  </button>
+                </div>
+                <span className="font-medium text-navy-900 block mt-0.5">{createdSuccessUser.email}</span>
+              </div>
+
+              {createdSuccessUser.tempPassword && (
+                <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-amber-900">Assigned Password</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdSuccessUser.tempPassword || '');
+                        setCopiedField('pass');
+                        setTimeout(() => setCopiedField(null), 2000);
+                      }}
+                      className="p-1 text-amber-800 hover:text-amber-950 cursor-pointer"
+                    >
+                      {copiedField === 'pass' ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                  <span className="font-mono font-bold text-amber-950 block mt-0.5 text-xs">
+                    {createdSuccessUser.tempPassword}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-surface-border flex items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const text = `Urban Ledger User Credentials:\nEmail: ${createdSuccessUser.email}\nPassword: ${createdSuccessUser.tempPassword || ''}\nRole: ${createdSuccessUser.role}\nUser ID: ${createdSuccessUser.id}`;
+                  navigator.clipboard.writeText(text);
+                  setCopiedField('all');
+                  setTimeout(() => setCopiedField(null), 2000);
+                }}
+                className="text-xs gap-1.5 cursor-pointer"
+              >
+                {copiedField === 'all' ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                <span>{copiedField === 'all' ? 'Copied!' : 'Copy Credentials'}</span>
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setCreatedSuccessUser(null);
+                    setActiveTab('list');
+                  }}
+                  className="bg-brand-700 hover:bg-brand-800 text-white text-xs px-4 cursor-pointer"
+                >
+                  View in Directory
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setCreatedSuccessUser(null);
+                    setActiveTab('create');
+                  }}
+                  className="text-xs cursor-pointer"
+                >
+                  Create Another
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

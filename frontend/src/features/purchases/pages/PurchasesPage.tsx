@@ -8,6 +8,9 @@ import {
   Calendar,
   Building2,
   ArrowRight,
+  AlertTriangle,
+  ArrowLeft,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +38,7 @@ export function PurchasesPage() {
     generateBillFromPO,
     contacts,
     products,
+    analyticAccounts,
     refreshERPData,
   } = useERP();
 
@@ -49,6 +53,7 @@ export function PurchasesPage() {
   const [vendorId, setVendorId] = useState(eligibleVendors[0]?.id || contacts[0]?.id || '');
   const [productId, setProductId] = useState(products[0]?.id || '');
   const [quantity, setQuantity] = useState(10);
+  const [selectedAnalyticId, setSelectedAnalyticId] = useState(analyticAccounts[0]?.id || '');
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -107,6 +112,7 @@ export function PurchasesPage() {
     const product = products.find((p) => p.id === productId);
     if (!vendor || !product) return;
 
+    const chosenAnalytic = analyticAccounts.find((a) => a.id === selectedAnalyticId) || analyticAccounts[0];
     const subtotal = product.purchasePrice * quantity;
     const taxAmount = Math.round(subtotal * 0.18);
     const grandTotal = subtotal + taxAmount;
@@ -126,6 +132,9 @@ export function PurchasesPage() {
           subtotal,
           taxAmount,
           total: grandTotal,
+          analyticAccountId: chosenAnalytic?.id,
+          analyticAccountName: chosenAnalytic ? (chosenAnalytic.code ? `${chosenAnalytic.code} - ${chosenAnalytic.name}` : chosenAnalytic.name) : 'General Procurement',
+          chartOfAccount: 'Purchase Account (COGS)',
         },
       ],
       subtotal,
@@ -139,6 +148,7 @@ export function PurchasesPage() {
       navigate(ROUTES.PURCHASES);
     }
     setNotice(`Purchase Order ${newPO.poNumber} created in DRAFT state.`);
+    setSelectedOrder(newPO);
     setTimeout(() => setNotice(null), 5000);
   };
 
@@ -159,6 +169,7 @@ export function PurchasesPage() {
       }
       setNotice(`Vendor Bill ${bill.billNumber} generated and posted with double-entry to General Ledger.`);
       setTimeout(() => setNotice(null), 5000);
+      navigate(`/bills/${bill.id}`);
     }
   };
 
@@ -177,7 +188,7 @@ export function PurchasesPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary">
+    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto bg-surface-secondary">
       {/* Odoo Control Panel */}
       <OdooControlPanel
         title="Purchase Orders"
@@ -205,7 +216,7 @@ export function PurchasesPage() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 max-w-7xl w-full mx-auto">
+      <div className="flex-1 px-4 sm:px-6 pt-4 pb-8 space-y-4 w-full max-w-7xl mx-auto">
         {notice && (
           <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-2xs">
             <div className="flex items-center gap-2">
@@ -277,7 +288,7 @@ export function PurchasesPage() {
                         <Button
                           size="sm"
                           onClick={() => handleConfirmPO(po.id)}
-                          className="h-7 text-[11px] px-2.5 bg-navy-900 hover:bg-navy-800 text-white font-medium cursor-pointer"
+                          className="h-7 text-[11px] px-2.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white font-medium cursor-pointer"
                         >
                           Confirm
                         </Button>
@@ -448,6 +459,21 @@ export function PurchasesPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Budget Analytics Account *</label>
+                <select
+                  value={selectedAnalyticId}
+                  onChange={(e) => setSelectedAnalyticId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  {analyticAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code ? `${a.code} - ` : ''}{a.name} ({a.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-navy-800 mb-1">Quantity</label>
                 <input
                   type="number"
@@ -458,6 +484,29 @@ export function PurchasesPage() {
                   className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
                 />
               </div>
+
+              {/* Non-blocking Exceeds Approved Budget Warning */}
+              {(() => {
+                const currentProd = products.find((p) => p.id === productId);
+                const currentAcc = analyticAccounts.find((a) => a.id === selectedAnalyticId) || analyticAccounts[0];
+                const estTotal = Math.round(((currentProd?.purchasePrice || 0) * quantity) * 1.18);
+                const accBal = currentAcc?.balance ?? 50000;
+                const exceeds = currentAcc && estTotal > accBal;
+                if (!exceeds) return null;
+                return (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-2xs space-y-1">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-amber-900">⚠️ Exceeds Approved Budget</span>
+                        <p className="text-[11px] text-amber-800 mt-0.5">
+                          The entered amount (₹{estTotal.toLocaleString('en-IN')}) is higher than the remaining budget amount (₹{accBal.toLocaleString('en-IN')}) for this budget line. Consider adjusting the value or revise the budget.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-200 text-xs space-y-1">
                 <div className="flex justify-between text-navy-600">
@@ -484,7 +533,7 @@ export function PurchasesPage() {
                 <Button type="button" variant="outline" size="sm" onClick={closeModal}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white cursor-pointer">
                   Create Purchase Order
                 </Button>
               </div>
@@ -494,72 +543,157 @@ export function PurchasesPage() {
       )}
 
       {/* ============================================================ */}
-      {/* PO DETAIL DRAWER                                             */}
+      {/* PO DETAIL DRAWER / FULL VIEW                                 */}
       {/* ============================================================ */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between border-b border-surface-border pb-3">
+          <div className="w-full max-w-3xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Top Row Action Buttons matching Diagram */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedOrder(null);
+                    setIsModalOpen(true);
+                  }}
+                  className="h-8 text-xs font-semibold cursor-pointer border-slate-300 hover:bg-slate-50"
+                >
+                  <Plus size={13} className="mr-1" />
+                  New
+                </Button>
+
+                {selectedOrder.status === 'DRAFT' && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleConfirmPO(selectedOrder.id)}
+                    className="h-8 text-xs font-semibold bg-brand-700 hover:bg-brand-800 text-white cursor-pointer shadow-2xs"
+                  >
+                    Confirm
+                  </Button>
+                )}
+
+                {selectedOrder.status === 'CONFIRMED' && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleGenerateBill(selectedOrder.id)}
+                    className="h-8 text-xs font-semibold bg-brand-700 hover:bg-brand-800 text-white cursor-pointer shadow-2xs"
+                  >
+                    <Receipt size={13} className="mr-1.5" />
+                    Create Bill
+                  </Button>
+                )}
+
+                {selectedOrder.status === 'BILLED' && selectedOrder.billId && (
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/bills/${selectedOrder.billId}`)}
+                    className="h-8 text-xs font-semibold bg-brand-700 hover:bg-brand-800 text-white cursor-pointer shadow-2xs"
+                  >
+                    <Receipt size={13} className="mr-1.5" />
+                    Open Bill ({selectedOrder.billId})
+                  </Button>
+                )}
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setNotice(`PO ${selectedOrder.poNumber} marked as cancelled.`);
+                    setSelectedOrder({ ...selectedOrder, status: 'DRAFT' });
+                    setTimeout(() => setNotice(null), 3000);
+                  }}
+                  className="h-8 text-xs font-medium text-red-600 hover:bg-red-50 border-red-200 cursor-pointer"
+                >
+                  Cancel
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={closeDetail}
+                  className="h-8 text-xs font-medium cursor-pointer border-slate-300"
+                >
+                  <ArrowLeft size={13} className="mr-1" />
+                  Back
+                </Button>
+                <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* PO Master Form Fields: PO No., Vendor Name, PO Date */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50/80 rounded-xl border border-slate-200 text-xs">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-navy-900">{selectedOrder.poNumber}</h3>
-                  <Badge variant={getStatusBadgeVariant(selectedOrder.status)}>
-                    {selectedOrder.status}
-                  </Badge>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">PO No.</span>
+                <p className="font-mono font-bold text-sm text-navy-900 mt-1">{selectedOrder.poNumber}</p>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Vendor Name</span>
+                <p className="font-semibold text-sm text-navy-900 mt-1">{selectedOrder.vendorName}</p>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">PO Date</span>
+                <p className="font-medium text-sm text-navy-900 mt-1">{selectedOrder.orderDate}</p>
+              </div>
+            </div>
+
+            {/* Non-blocking Warning Banner in PO View */}
+            {(() => {
+              const anyExceeded = selectedOrder.lines.some((ln) => {
+                const acc = analyticAccounts.find((a) => a.id === ln.analyticAccountId) || analyticAccounts[0];
+                return acc && ln.total > (acc.balance ?? 50000);
+              });
+              if (!anyExceeded && selectedOrder.grandTotal <= 50000) return null;
+              return (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 shadow-2xs space-y-1">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-amber-950 text-xs sm:text-sm">⚠️ Exceeds Approved Budget</span>
+                      <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                        The entered amount is higher than the remaining budget amount for this budget line. Consider adjusting the value or revise the budget.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Supplier: <span className="font-semibold text-navy-900">{selectedOrder.vendorName}</span>
-                </p>
-              </div>
-              <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
+              );
+            })()}
 
-            {/* Dates & Reference */}
-            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
-              <div>
-                <span className="text-[10px] text-text-muted uppercase">PO Date</span>
-                <p className="font-semibold text-navy-900 mt-0.5">{selectedOrder.orderDate}</p>
-              </div>
-              <div>
-                <span className="text-[10px] text-text-muted uppercase">Vendor Bill Link</span>
-                <p className="font-semibold text-brand-700 mt-0.5">
-                  {selectedOrder.billId ? (
-                    <Link to={`/bills/${selectedOrder.billId}`} className="hover:underline">
-                      {selectedOrder.billId}
-                    </Link>
-                  ) : (
-                    'Pending Bill Generation'
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {/* Line Items */}
+            {/* Line Items Table with Sr. No., Product, Budget Analytics, Qty, Unit Price, Total */}
             <div>
               <span className="text-xs font-bold text-navy-900 uppercase tracking-wider block mb-2">
                 Purchased Line Items
               </span>
-              <div className="rounded-lg border border-surface-border overflow-hidden">
+              <div className="rounded-xl border border-surface-border overflow-hidden shadow-2xs">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-surface-border text-navy-600">
+                  <thead className="bg-slate-100/80 border-b border-surface-border text-navy-700 font-semibold">
                     <tr>
-                      <th className="p-2.5">Material</th>
-                      <th className="p-2.5 text-right">Qty</th>
-                      <th className="p-2.5 text-right">Unit Rate</th>
-                      <th className="p-2.5 text-right">Tax (18%)</th>
-                      <th className="p-2.5 text-right">Total</th>
+                      <th className="p-3 text-center w-12">Sr. No.</th>
+                      <th className="p-3">Product</th>
+                      <th className="p-3">Budget Analytics</th>
+                      <th className="p-3 text-right">Qty</th>
+                      <th className="p-3 text-right">Unit Price</th>
+                      <th className="p-3 text-right">Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedOrder.lines.map((ln) => (
-                      <tr key={ln.id}>
-                        <td className="p-2.5 font-medium text-navy-900">{ln.productName}</td>
-                        <td className="p-2.5 text-right font-mono">{ln.quantity}</td>
-                        <td className="p-2.5 text-right font-mono">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono text-text-muted">₹{ln.taxAmount.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono font-semibold text-navy-900">
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {selectedOrder.lines.map((ln, idx) => (
+                      <tr key={ln.id} className="hover:bg-slate-50/60">
+                        <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                        <td className="p-3 font-semibold text-navy-900">{ln.productName}</td>
+                        <td className="p-3 text-xs text-navy-700">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-brand-50 text-brand-700 border border-brand-200/60">
+                            {ln.analyticAccountName || 'General Procurement'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono font-medium">{ln.quantity}</td>
+                        <td className="p-3 text-right font-mono text-slate-700">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
+                        <td className="p-3 text-right font-mono font-bold text-navy-950">
                           ₹{ln.total.toLocaleString('en-IN')}
                         </td>
                       </tr>
@@ -570,7 +704,7 @@ export function PurchasesPage() {
             </div>
 
             {/* Totals Summary */}
-            <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+            <div className="p-4 bg-slate-50/90 rounded-xl border border-slate-200 text-xs space-y-2">
               <div className="flex justify-between text-navy-600">
                 <span>Subtotal</span>
                 <span className="font-mono">₹{selectedOrder.subtotal.toLocaleString('en-IN')}</span>
@@ -579,43 +713,10 @@ export function PurchasesPage() {
                 <span>Input GST (18%)</span>
                 <span className="font-mono">₹{selectedOrder.taxTotal.toLocaleString('en-IN')}</span>
               </div>
-              <div className="flex justify-between font-bold text-sm text-navy-900 pt-1 border-t border-slate-200">
+              <div className="flex justify-between font-bold text-base text-navy-950 pt-2 border-t border-slate-200">
                 <span>Grand Total</span>
-                <span className="font-mono">₹{selectedOrder.grandTotal.toLocaleString('en-IN')}</span>
+                <span className="font-mono text-brand-700">₹{selectedOrder.grandTotal.toLocaleString('en-IN')}</span>
               </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-surface-border">
-              {selectedOrder.status === 'DRAFT' && (
-                <Button
-                  size="sm"
-                  onClick={() => handleConfirmPO(selectedOrder.id)}
-                  className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
-                >
-                  Confirm PO
-                </Button>
-              )}
-              {selectedOrder.status === 'CONFIRMED' && (
-                <Button
-                  size="sm"
-                  onClick={() => handleGenerateBill(selectedOrder.id)}
-                  className="bg-brand-700 hover:bg-brand-800 text-white text-xs cursor-pointer"
-                >
-                  <Receipt size={13} className="mr-1.5" />
-                  Generate Vendor Bill
-                </Button>
-              )}
-              {selectedOrder.status === 'BILLED' && selectedOrder.billId && (
-                <Link to={`/bills/${selectedOrder.billId}`}>
-                  <Button variant="outline" size="sm" className="text-xs cursor-pointer">
-                    Open Vendor Bill
-                  </Button>
-                </Link>
-              )}
-              <Button variant="outline" size="sm" onClick={closeDetail} className="cursor-pointer">
-                Close
-              </Button>
             </div>
           </div>
         </div>

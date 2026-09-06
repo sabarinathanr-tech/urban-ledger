@@ -5,11 +5,13 @@ import {
   CreditCard,
   CheckCircle2,
   X,
-  BookOpen,
   Printer,
   User,
   Calendar,
   ExternalLink,
+  ShoppingCart,
+  PieChart,
+  ArrowLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,8 +39,10 @@ export function InvoicesPage() {
     invoices,
     createInvoice,
     registerCustomerPayment,
+    payments,
     contacts,
     products,
+    analyticAccounts,
     refreshERPData,
   } = useERP();
 
@@ -51,6 +55,8 @@ export function InvoicesPage() {
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentJournal, setPaymentJournal] = useState<'BANK' | 'CASH'>('BANK');
   const [paymentMethod, setPaymentMethod] = useState<'HDFC Bank Transfer' | 'Cash Register' | 'UPI'>('HDFC Bank Transfer');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentNote, setPaymentNote] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
@@ -60,6 +66,8 @@ export function InvoicesPage() {
   const [newCustomerId, setNewCustomerId] = useState(eligibleCustomers[0]?.id || contacts[0]?.id || '');
   const [newProductId, setNewProductId] = useState(products[0]?.id || '');
   const [newQuantity, setNewQuantity] = useState(1);
+  const [newInvoiceReference, setNewInvoiceReference] = useState('ABC-26-001');
+  const [newAnalyticId, setNewAnalyticId] = useState(analyticAccounts[0]?.id || '');
 
   useEffect(() => {
     if (!newCustomerId && (eligibleCustomers[0]?.id || contacts[0]?.id)) {
@@ -134,6 +142,8 @@ export function InvoicesPage() {
   const handleOpenPayment = (inv: Invoice) => {
     setActivePaymentInvoice(inv);
     setPaymentAmount(inv.balanceDue);
+    setPaymentNote(`Receipt for ${inv.invoiceNumber}`);
+    setPaymentDate(new Date().toISOString().split('T')[0]);
     setPaymentModalOpen(true);
   };
 
@@ -169,6 +179,7 @@ export function InvoicesPage() {
     const prod = products.find((p) => p.id === newProductId);
     if (!cust || !prod) return;
 
+    const chosenAnalytic = analyticAccounts.find((a) => a.id === newAnalyticId) || analyticAccounts[0];
     const subtotal = prod.salesPrice * newQuantity;
     const taxAmount = Math.round(subtotal * 0.18);
     const grandTotal = subtotal + taxAmount;
@@ -183,11 +194,15 @@ export function InvoicesPage() {
       subtotal,
       taxAmount,
       total: grandTotal,
+      analyticAccountId: chosenAnalytic?.id,
+      analyticAccountName: chosenAnalytic ? (chosenAnalytic.code ? `${chosenAnalytic.code} - ${chosenAnalytic.name}` : chosenAnalytic.name) : 'General Commercial Operations',
+      chartOfAccount: 'Sales Account (Revenue)',
     };
 
     const newInv = createInvoice({
       customerId: cust.id,
       customerName: cust.name,
+      invoiceReference: newInvoiceReference || 'ABC-26-001',
       issueDate: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
       status: 'POSTED',
@@ -203,6 +218,7 @@ export function InvoicesPage() {
     if (location.pathname === ROUTES.INVOICES_NEW) {
       navigate(ROUTES.INVOICES);
     }
+    setSelectedInvoice(newInv);
     setNotice(`Customer Invoice ${newInv.invoiceNumber} posted with balanced GL entry.`);
     setTimeout(() => setNotice(null), 5000);
   };
@@ -215,7 +231,7 @@ export function InvoicesPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary">
+    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto bg-surface-secondary">
       {/* Odoo Control Panel */}
       <OdooControlPanel
         title={isContact ? 'My Invoices' : 'Customer Invoices'}
@@ -251,7 +267,7 @@ export function InvoicesPage() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 max-w-7xl w-full mx-auto">
+      <div className="flex-1 px-4 sm:px-6 pt-4 pb-8 space-y-4 w-full max-w-7xl mx-auto">
         {notice && (
           <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-2xs">
             <div className="flex items-center gap-2">
@@ -328,7 +344,7 @@ export function InvoicesPage() {
                         <Button
                           size="sm"
                           onClick={() => handleOpenPayment(inv)}
-                          className="h-7 text-[11px] px-2.5 bg-navy-900 hover:bg-navy-800 text-white font-medium cursor-pointer shadow-2xs"
+                          className="h-7 text-[11px] px-2.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white font-medium cursor-pointer shadow-2xs"
                         >
                           <CreditCard size={11} className="mr-1" />
                           Pay
@@ -418,7 +434,7 @@ export function InvoicesPage() {
                             <Button
                               size="sm"
                               onClick={() => handleOpenPayment(inv)}
-                              className="h-7 text-[11px] px-2 bg-navy-900 hover:bg-navy-800 text-white cursor-pointer"
+                              className="h-7 text-[11px] px-2 bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white cursor-pointer"
                             >
                               <CreditCard size={11} className="mr-1" />
                               Pay
@@ -447,33 +463,61 @@ export function InvoicesPage() {
       </div>
 
       {/* ============================================================ */}
-      {/* INVOICE DETAIL DRAWER                                        */}
+      {/* CUSTOMER INVOICE DETAIL VIEW                                 */}
       {/* ============================================================ */}
       {selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-start justify-between border-b border-surface-border pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-navy-900">{selectedInvoice.invoiceNumber}</h3>
-                  <Badge variant={getStatusBadgeVariant(selectedInvoice.status)}>
-                    {selectedInvoice.status}
-                  </Badge>
-                </div>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Billed to: <span className="font-semibold text-navy-900">{selectedInvoice.customerName}</span>
-                </p>
-              </div>
+          <div className="w-full max-w-3xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Top Row: Smart Buttons on top right & Close */}
+            <div className="flex items-center justify-between border-b border-surface-border pb-4">
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={closeDetail}
+                  className="h-8 text-xs font-medium cursor-pointer border-slate-300"
+                >
+                  <ArrowLeft size={13} className="mr-1" />
+                  Back
+                </Button>
+                <div>
+                  <h3 className="text-lg font-bold text-navy-900 leading-tight">{selectedInvoice.invoiceNumber}</h3>
+                  <p className="text-xs text-text-muted">Customer Tax Invoice</p>
+                </div>
+              </div>
+
+              {/* Smart Buttons Top Right matching diagram */}
+              <div className="flex items-center gap-2">
+                {selectedInvoice.soId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/sales/${selectedInvoice.soId}`)}
+                    className="h-8 text-xs font-semibold text-brand-700 border-brand-300 bg-brand-50/50 hover:bg-brand-100/70 cursor-pointer shadow-2xs"
+                    title={`Source Sales Order: ${selectedInvoice.soNumber || selectedInvoice.soId}`}
+                  >
+                    <ShoppingCart size={13} className="mr-1 text-brand-600" />
+                    SO ({selectedInvoice.soNumber || 'SO'})
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(ROUTES.BUDGETS)}
+                  className="h-8 text-xs font-semibold text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/70 cursor-pointer shadow-2xs"
+                  title="View Budget Analytics"
+                >
+                  <PieChart size={13} className="mr-1 text-indigo-600" />
+                  Budget
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setIsPrintModalOpen(true)}
-                  className="flex items-center gap-1 text-xs cursor-pointer"
+                  className="h-8 text-xs flex items-center gap-1 cursor-pointer border-slate-300"
                 >
                   <Printer size={13} />
-                  <span>Print / PDF</span>
+                  <span>Print</span>
                 </Button>
                 <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
                   <X size={18} />
@@ -481,48 +525,84 @@ export function InvoicesPage() {
               </div>
             </div>
 
-            {/* Invoicing Dates & GL Link */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+            {/* Customer Invoice Master Fields:
+                Customer Invoice No., Customer Name, Status (Paid, Partial, Not Paid), Invoice Reference, Invoice Date, Due Date */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 bg-slate-50/80 rounded-xl border border-slate-200 text-xs">
               <div>
-                <span className="text-[10px] text-text-muted uppercase">Issue Date</span>
-                <p className="font-semibold text-navy-900 mt-0.5">{selectedInvoice.issueDate}</p>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Customer Invoice No.</span>
+                <p className="font-mono font-bold text-sm text-navy-950 mt-1">{selectedInvoice.invoiceNumber}</p>
               </div>
               <div>
-                <span className="text-[10px] text-text-muted uppercase">Due Date</span>
-                <p className="font-semibold text-navy-900 mt-0.5">{selectedInvoice.dueDate}</p>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Customer Name</span>
+                <p className="font-semibold text-sm text-navy-950 mt-1">{selectedInvoice.customerName}</p>
               </div>
               <div>
-                <span className="text-[10px] text-text-muted uppercase">Accounting Link</span>
-                <p className="font-mono font-semibold text-brand-700 mt-0.5 flex items-center gap-1">
-                  <BookOpen size={12} /> {selectedInvoice.journalEntryId || 'Posted in GL'}
-                </p>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Status</span>
+                <div className="mt-1">
+                  <Badge
+                    className={
+                      selectedInvoice.balanceDue === 0
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold'
+                        : selectedInvoice.amountPaid > 0
+                        ? 'bg-amber-100 text-amber-800 border-amber-300 font-semibold'
+                        : 'bg-rose-100 text-rose-800 border-rose-300 font-semibold'
+                    }
+                  >
+                    {selectedInvoice.balanceDue === 0 ? 'Paid' : selectedInvoice.amountPaid > 0 ? 'Partial' : 'Not Paid'}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Invoice Reference</span>
+                <p className="font-mono font-medium text-xs text-navy-800 mt-1">{selectedInvoice.invoiceReference || 'ABC-26-001'}</p>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Invoice Date</span>
+                <p className="font-medium text-xs text-navy-800 mt-1">{selectedInvoice.issueDate}</p>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Due Date</span>
+                <p className="font-medium text-xs text-navy-800 mt-1">{selectedInvoice.dueDate}</p>
               </div>
             </div>
 
-            {/* Line Items Table */}
+            {/* Line Items Table:
+                Columns: Sr. No., Product, Chart of Accounts, Budget Analytics, Qty, Unit Price, Total */}
             <div>
               <span className="text-xs font-bold text-navy-900 uppercase tracking-wider block mb-2">
-                Itemized Products & GST (18%)
+                Itemized Products & Revenue Allocation
               </span>
-              <div className="rounded-lg border border-surface-border overflow-hidden">
+              <div className="rounded-xl border border-surface-border overflow-hidden shadow-2xs">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-surface-border text-navy-600">
+                  <thead className="bg-slate-100/80 border-b border-surface-border text-navy-700 font-semibold">
                     <tr>
-                      <th className="p-2.5">Item Description</th>
-                      <th className="p-2.5 text-right">Qty</th>
-                      <th className="p-2.5 text-right">Unit Rate</th>
-                      <th className="p-2.5 text-right">GST (18%)</th>
-                      <th className="p-2.5 text-right">Total</th>
+                      <th className="p-3 text-center w-12">Sr. No.</th>
+                      <th className="p-3">Product</th>
+                      <th className="p-3">Chart of Accounts</th>
+                      <th className="p-3">Budget Analytics</th>
+                      <th className="p-3 text-right">Qty</th>
+                      <th className="p-3 text-right">Unit Price</th>
+                      <th className="p-3 text-right">Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedInvoice.lines.map((ln) => (
-                      <tr key={ln.id}>
-                        <td className="p-2.5 font-medium text-navy-900">{ln.productName}</td>
-                        <td className="p-2.5 text-right font-mono">{ln.quantity}</td>
-                        <td className="p-2.5 text-right font-mono">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono text-text-muted">₹{ln.taxAmount.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono font-semibold text-navy-900">
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {selectedInvoice.lines.map((ln, idx) => (
+                      <tr key={ln.id} className="hover:bg-slate-50/60">
+                        <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                        <td className="p-3 font-semibold text-navy-900">{ln.productName}</td>
+                        <td className="p-3 text-xs text-slate-600">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                            {ln.chartOfAccount || 'Sales Account (Revenue)'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-xs text-navy-700">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-brand-50 text-brand-700 border border-brand-200/60">
+                            {ln.analyticAccountName || 'General Commercial Operations'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono font-medium">{ln.quantity}</td>
+                        <td className="p-3 text-right font-mono text-slate-700">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
+                        <td className="p-3 text-right font-mono font-bold text-navy-950">
                           ₹{ln.total.toLocaleString('en-IN')}
                         </td>
                       </tr>
@@ -532,25 +612,42 @@ export function InvoicesPage() {
               </div>
             </div>
 
-            {/* Totals Summary */}
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
-              <div className="flex justify-between text-navy-600">
-                <span>Subtotal (Excl. Tax)</span>
-                <span className="font-mono">₹{selectedInvoice.subtotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-navy-600">
-                <span>Output GST (9% CGST + 9% SGST)</span>
-                <span className="font-mono">₹{selectedInvoice.taxTotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between font-bold text-sm text-navy-900 pt-1.5 border-t border-slate-200">
-                <span>Grand Total</span>
-                <span className="font-mono">₹{selectedInvoice.grandTotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between font-semibold text-xs text-red-600 pt-1">
-                <span>Outstanding Balance Due</span>
-                <span className="font-mono">₹{selectedInvoice.balanceDue.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
+            {/* Totals Breakdown matching mockup:
+                Total, Paid Via Cash, Paid Via Bank, Amount Due */}
+            {(() => {
+              const invPayments = payments.filter(
+                (p) => p.documentRef === selectedInvoice.invoiceNumber || p.documentRef === selectedInvoice.id
+              );
+              const paidCash = invPayments.filter((p) => p.journal === 'CASH').reduce((s, p) => s + p.amount, 0);
+              const paidBank =
+                invPayments.filter((p) => p.journal === 'BANK').reduce((s, p) => s + p.amount, 0) ||
+                Math.max(0, selectedInvoice.amountPaid - paidCash);
+
+              return (
+                <div className="flex justify-end">
+                  <div className="w-full sm:w-72 p-4 bg-slate-50/90 rounded-xl border border-slate-200 text-xs space-y-2">
+                    <div className="flex justify-between text-navy-700 font-semibold">
+                      <span>Total Invoice</span>
+                      <span className="font-mono">₹{selectedInvoice.grandTotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Paid Via Cash</span>
+                      <span className="font-mono text-emerald-700 font-medium">₹{paidCash.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Paid Via Bank</span>
+                      <span className="font-mono text-emerald-700 font-medium">₹{paidBank.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-sm text-navy-950 pt-2 border-t border-slate-200">
+                      <span>Amount Due</span>
+                      <span className={`font-mono ${selectedInvoice.balanceDue > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        ₹{selectedInvoice.balanceDue.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Footer Actions */}
             <div className="flex items-center justify-between pt-3 border-t border-surface-border">
@@ -566,10 +663,10 @@ export function InvoicesPage() {
                   <Button
                     size="sm"
                     onClick={() => handleOpenPayment(selectedInvoice)}
-                    className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
+                    className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white text-xs font-semibold cursor-pointer shadow-2xs"
                   >
                     <CreditCard size={13} className="mr-1.5" />
-                    Register Payment
+                    Pay
                   </Button>
                 )}
                 <Button variant="outline" size="sm" onClick={closeDetail} className="cursor-pointer">
@@ -582,14 +679,14 @@ export function InvoicesPage() {
       )}
 
       {/* ============================================================ */}
-      {/* REGISTER PAYMENT MODAL                                       */}
+      {/* REGISTER CUSTOMER PAYMENT MODAL matching diagram             */}
       {/* ============================================================ */}
       {paymentModalOpen && activePaymentInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-lg rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <div>
-                <h3 className="text-base font-bold text-navy-900">Register Customer Payment</h3>
+                <h3 className="text-base font-bold text-navy-900">Payment Form</h3>
                 <p className="text-xs text-text-muted">Settlement voucher for {activePaymentInvoice.invoiceNumber}</p>
               </div>
               <button onClick={() => setPaymentModalOpen(false)} className="text-text-muted hover:text-navy-900 cursor-pointer">
@@ -597,69 +694,130 @@ export function InvoicesPage() {
               </button>
             </div>
 
+            {/* Stepper matching mockup: Draft -> Confirm -> Canceled */}
+            <div className="flex items-center justify-center gap-2 py-1 border-b border-slate-100 text-xs">
+              <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-600 font-medium">Draft</span>
+              <span className="text-slate-400">&rarr;</span>
+              <span className="px-2.5 py-1 rounded bg-brand-50 text-brand-700 font-bold border border-brand-200">Confirm</span>
+              <span className="text-slate-400">&rarr;</span>
+              <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-400 font-medium">Canceled</span>
+            </div>
+
             <form onSubmit={handleRegisterPayment} className="space-y-3.5 text-xs">
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="flex justify-between text-navy-600 mb-1">
-                  <span>Customer:</span>
-                  <span className="font-semibold text-navy-900">{activePaymentInvoice.customerName}</span>
-                </div>
-                <div className="flex justify-between text-navy-600">
-                  <span>Balance Due:</span>
-                  <span className="font-mono font-bold text-red-600">
-                    ₹{activePaymentInvoice.balanceDue.toLocaleString('en-IN')}
-                  </span>
+              {/* Payment Type: Radio Send / Receive */}
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Payment Type *</label>
+                <div className="flex items-center gap-4 pt-0.5">
+                  <label className="flex items-center gap-2 cursor-not-allowed opacity-40">
+                    <input type="radio" name="paymentTypeRadio" disabled />
+                    <span>Send</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentTypeRadio"
+                      checked={true}
+                      readOnly
+                      className="text-brand-700 focus:ring-brand-500"
+                    />
+                    <span className="font-semibold text-navy-900">Receive (Customer Receipt)</span>
+                  </label>
                 </div>
               </div>
 
+              {/* Partner */}
               <div>
-                <label className="block text-xs font-semibold text-navy-800 mb-1">Payment Amount (₹) *</label>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Partner *</label>
                 <input
-                  type="number"
-                  min={1}
-                  max={activePaymentInvoice.balanceDue}
-                  required
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
-                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
+                  type="text"
+                  readOnly
+                  value={activePaymentInvoice.customerName}
+                  className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-navy-900"
                 />
               </div>
 
+              {/* Amount & Date */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-navy-800 mb-1">Destination Journal</label>
-                  <select
-                    value={paymentJournal}
-                    onChange={(e) => setPaymentJournal(e.target.value as 'BANK' | 'CASH')}
-                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
-                  >
-                    <option value="BANK">HDFC Bank Account</option>
-                    <option value="CASH">Cash Register</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Amount (₹) *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={activePaymentInvoice.balanceDue}
+                    required
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono font-bold text-navy-950 focus:border-brand-600 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500">Max Due: ₹{activePaymentInvoice.balanceDue.toLocaleString('en-IN')}</span>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-navy-800 mb-1">Payment Mode</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'HDFC Bank Transfer' | 'Cash Register' | 'UPI')}
-                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
-                  >
-                    <option value="HDFC Bank Transfer">NEFT / Bank Transfer</option>
-                    <option value="UPI">UPI Digital Payment</option>
-                    <option value="Cash Register">Cash Voucher</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-600 focus:outline-none"
+                  />
                 </div>
               </div>
 
+              {/* Payment Via: Bank / Cash */}
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Payment Via *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label
+                    onClick={() => {
+                      setPaymentJournal('BANK');
+                      setPaymentMethod('HDFC Bank Transfer');
+                    }}
+                    className={`flex items-center justify-center p-2.5 rounded-lg border cursor-pointer font-medium text-xs transition ${
+                      paymentJournal === 'BANK'
+                        ? 'border-brand-600 bg-brand-50/70 text-brand-800 font-bold'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    🏦 Bank
+                  </label>
+                  <label
+                    onClick={() => {
+                      setPaymentJournal('CASH');
+                      setPaymentMethod('Cash Register');
+                    }}
+                    className={`flex items-center justify-center p-2.5 rounded-lg border cursor-pointer font-medium text-xs transition ${
+                      paymentJournal === 'CASH'
+                        ? 'border-brand-600 bg-brand-50/70 text-brand-800 font-bold'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    💵 Cash
+                  </label>
+                </div>
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Note (Alphanumeric)</label>
+                <input
+                  type="text"
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="e.g. Receipt for INV/2026/0001"
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-brand-600 focus:outline-none"
+                />
+              </div>
+
               <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-[11px] text-emerald-900">
-                <span className="font-semibold">Double-Entry Impact:</span> Will debit Cash/Bank and credit Accounts Receivable (Debtors), updating the General Ledger immediately.
+                <span className="font-semibold">Double-Entry Posting:</span> Debit {paymentJournal === 'BANK' ? 'Bank' : 'Cash'} A/c &bull; Credit Debtors / Sales A/c.
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button type="button" variant="outline" size="sm" onClick={() => setPaymentModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
-                  Confirm & Post Payment
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white font-semibold cursor-pointer">
+                  Confirm
                 </Button>
               </div>
             </form>
@@ -676,7 +834,7 @@ export function InvoicesPage() {
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <div>
                 <h3 className="text-base font-bold text-navy-900">Create Tax Invoice</h3>
-                <p className="text-xs text-text-muted">Direct invoice billing to customer</p>
+                <p className="text-xs text-text-muted">Direct invoice billing with auto-journal entry</p>
               </div>
               <button
                 onClick={() => {
@@ -708,6 +866,18 @@ export function InvoicesPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Invoice Reference *</label>
+                <input
+                  type="text"
+                  required
+                  value={newInvoiceReference}
+                  onChange={(e) => setNewInvoiceReference(e.target.value)}
+                  placeholder="e.g. ABC-26-001"
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-navy-800 mb-1">Product Item *</label>
                 <select
                   value={newProductId}
@@ -717,6 +887,21 @@ export function InvoicesPage() {
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} — ₹{p.salesPrice.toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Budget Analytics Account *</label>
+                <select
+                  value={newAnalyticId}
+                  onChange={(e) => setNewAnalyticId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  {analyticAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code ? `${a.code} - ` : ''}{a.name} ({a.type})
                     </option>
                   ))}
                 </select>
@@ -746,7 +931,7 @@ export function InvoicesPage() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white cursor-pointer font-semibold">
                   Generate & Post Invoice
                 </Button>
               </div>
@@ -759,58 +944,30 @@ export function InvoicesPage() {
       {/* TAX INVOICE PRINT & PDF DOCUMENT MODAL                       */}
       {/* ============================================================ */}
       {isPrintModalOpen && selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/80 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="relative w-full max-w-3xl bg-white rounded-xl shadow-2xl p-6 my-8 space-y-4">
-            <div className="flex items-center justify-between border-b border-surface-border pb-3 no-print">
-              <div className="flex items-center gap-2">
-                <Printer size={18} className="text-navy-700" />
-                <h3 className="font-bold text-navy-900 text-sm">Print / PDF Preview: {selectedInvoice.invoiceNumber}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => window.print()}
-                  className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
-                >
-                  <Printer size={13} className="mr-1.5" />
-                  Print / Save PDF
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => setIsPrintModalOpen(false)}
-                  className="text-text-muted hover:text-navy-900 p-1 cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <TaxInvoiceDocument
-              documentType="INVOICE"
-              documentNumber={selectedInvoice.invoiceNumber}
-              date={selectedInvoice.issueDate}
-              dueDate={selectedInvoice.dueDate}
-              partnerName={selectedInvoice.customerName}
-              partnerAddress="Mumbai, Maharashtra - 400001"
-              lines={selectedInvoice.lines.map((ln) => ({
-                id: ln.id,
-                name: ln.productName,
-                quantity: ln.quantity,
-                unitPrice: ln.unitPrice,
-                subtotal: ln.subtotal,
-                tax: ln.taxAmount,
-                total: ln.total,
-              }))}
-              subtotal={selectedInvoice.subtotal}
-              taxTotal={selectedInvoice.taxTotal}
-              grandTotal={selectedInvoice.grandTotal}
-              amountPaid={selectedInvoice.amountPaid}
-              balanceDue={selectedInvoice.balanceDue}
-              status={selectedInvoice.status}
-              onClose={() => setIsPrintModalOpen(false)}
-            />
-          </div>
-        </div>
+        <TaxInvoiceDocument
+          documentType="INVOICE"
+          documentNumber={selectedInvoice.invoiceNumber}
+          date={selectedInvoice.issueDate}
+          dueDate={selectedInvoice.dueDate}
+          partnerName={selectedInvoice.customerName}
+          partnerAddress="Mumbai, Maharashtra - 400001"
+          lines={selectedInvoice.lines.map((ln) => ({
+            id: ln.id,
+            name: ln.productName,
+            quantity: ln.quantity,
+            unitPrice: ln.unitPrice,
+            subtotal: ln.subtotal,
+            tax: ln.taxAmount,
+            total: ln.total,
+          }))}
+          subtotal={selectedInvoice.subtotal}
+          taxTotal={selectedInvoice.taxTotal}
+          grandTotal={selectedInvoice.grandTotal}
+          amountPaid={selectedInvoice.amountPaid}
+          balanceDue={selectedInvoice.balanceDue}
+          status={selectedInvoice.status}
+          onClose={() => setIsPrintModalOpen(false)}
+        />
       )}
     </div>
   );

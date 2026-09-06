@@ -20,11 +20,16 @@ export function DashboardHeader({
   return (
     <header className="space-y-1">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-display text-navy-900">Financial Control Center</h1>
-          <p className="mt-1 text-body text-navy-400">
-            Real-time overview of Urban Furniture&apos;s financial position.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-white border border-surface-border shadow-xs p-1 flex items-center justify-center shrink-0">
+            <img src="/logo-light.png" alt="Urban Ledger Logo" className="w-full h-full object-contain" />
+          </div>
+          <div>
+            <h1 className="text-display text-navy-900">Financial Control Center</h1>
+            <p className="mt-0.5 text-body text-navy-400">
+              Real-time overview of Urban Furniture&apos;s financial position.
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -54,7 +59,6 @@ export function DashboardHeader({
       {/* Last updated */}
       <p className="text-caption text-navy-300">
         Last updated: {formatRelativeTime(lastUpdated)}
-        <span className="ml-1 text-navy-200">(demo data)</span>
       </p>
     </header>
   );

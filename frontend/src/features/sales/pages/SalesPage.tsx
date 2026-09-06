@@ -8,6 +8,8 @@ import {
   Calendar,
   User,
   ArrowRight,
+  ArrowLeft,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +37,7 @@ export function SalesPage() {
     generateInvoiceFromSO,
     contacts,
     products,
+    analyticAccounts,
     refreshERPData,
   } = useERP();
 
@@ -49,6 +52,7 @@ export function SalesPage() {
   const [customerId, setCustomerId] = useState(eligibleCustomers[0]?.id || contacts[0]?.id || '');
   const [productId, setProductId] = useState(products[0]?.id || '');
   const [quantity, setQuantity] = useState(2);
+  const [selectedAnalyticId, setSelectedAnalyticId] = useState(analyticAccounts[0]?.id || '');
   const [orderNotice, setOrderNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,10 +99,14 @@ export function SalesPage() {
         return 'success';
       case 'CONFIRMED':
         return 'info';
+      case 'QUOTATION':
+        return 'warning';
       case 'DRAFT':
         return 'default';
       case 'CANCELLED':
         return 'danger';
+      default:
+        return 'default';
     }
   };
 
@@ -109,6 +117,7 @@ export function SalesPage() {
 
     if (!customer || !product) return;
 
+    const chosenAnalytic = analyticAccounts.find((a) => a.id === selectedAnalyticId) || analyticAccounts[0];
     const subtotal = product.salesPrice * quantity;
     const taxAmount = Math.round(subtotal * 0.18);
     const grandTotal = subtotal + taxAmount;
@@ -123,6 +132,9 @@ export function SalesPage() {
       subtotal,
       taxAmount,
       total: grandTotal,
+      analyticAccountId: chosenAnalytic?.id,
+      analyticAccountName: chosenAnalytic ? (chosenAnalytic.code ? `${chosenAnalytic.code} - ${chosenAnalytic.name}` : chosenAnalytic.name) : 'General Commercial Operations',
+      chartOfAccount: 'Sales Account (Revenue)',
     };
 
     const newOrder = createSalesOrder({
@@ -140,6 +152,7 @@ export function SalesPage() {
     if (location.pathname === ROUTES.SALES_NEW) {
       navigate(ROUTES.SALES);
     }
+    setSelectedOrder(newOrder);
     setOrderNotice(`Sales Order ${newOrder.orderNumber} created successfully in DRAFT state.`);
     setTimeout(() => setOrderNotice(null), 5000);
   };
@@ -163,6 +176,7 @@ export function SalesPage() {
         `Invoice ${invoice.invoiceNumber} created and posted with double-entry journal entry to General Ledger.`
       );
       setTimeout(() => setOrderNotice(null), 5000);
+      navigate(`/invoices/${invoice.id}`);
     }
   };
 
@@ -181,7 +195,7 @@ export function SalesPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary">
+    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto bg-surface-secondary">
       {/* Odoo Control Panel */}
       <OdooControlPanel
         title="Sales Orders"
@@ -209,7 +223,7 @@ export function SalesPage() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 max-w-7xl w-full mx-auto">
+      <div className="flex-1 px-4 sm:px-6 pt-4 pb-8 space-y-4 w-full max-w-7xl mx-auto">
         {orderNotice && (
           <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-2xs">
             <div className="flex items-center gap-2">
@@ -281,7 +295,7 @@ export function SalesPage() {
                         <Button
                           size="sm"
                           onClick={() => handleConfirmOrder(order.id)}
-                          className="h-7 text-[11px] px-2.5 bg-navy-900 hover:bg-navy-800 text-white font-medium cursor-pointer"
+                          className="h-7 text-[11px] px-2.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white font-medium cursor-pointer"
                         >
                           Confirm
                         </Button>
@@ -452,6 +466,21 @@ export function SalesPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">Budget Analytics Account *</label>
+                <select
+                  value={selectedAnalyticId}
+                  onChange={(e) => setSelectedAnalyticId(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  {analyticAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code ? `${a.code} - ` : ''}{a.name} ({a.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-navy-800 mb-1">Quantity</label>
                 <input
                   type="number"
@@ -488,7 +517,7 @@ export function SalesPage() {
                 <Button type="button" variant="outline" size="sm" onClick={closeModal}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white cursor-pointer font-semibold">
                   Create Sales Order
                 </Button>
               </div>
@@ -498,72 +527,135 @@ export function SalesPage() {
       )}
 
       {/* ============================================================ */}
-      {/* SALES ORDER DETAIL DRAWER                                    */}
+      {/* SALES ORDER DETAIL DRAWER / FULL VIEW                        */}
       {/* ============================================================ */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between border-b border-surface-border pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-navy-900">{selectedOrder.orderNumber}</h3>
-                  <Badge variant={getStatusBadgeVariant(selectedOrder.status)}>
-                    {selectedOrder.status}
-                  </Badge>
-                </div>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Customer: <span className="font-semibold text-navy-900">{selectedOrder.customerName}</span>
-                </p>
+          <div className="w-full max-w-3xl rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Top Row Action Buttons matching Diagram: New, Confirm, Create Invoice, Cancel, Back */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedOrder(null);
+                    setIsModalOpen(true);
+                  }}
+                  className="h-8 text-xs font-semibold cursor-pointer border-slate-300 hover:bg-slate-50"
+                >
+                  <Plus size={13} className="mr-1" />
+                  New
+                </Button>
+
+                {selectedOrder.status === 'DRAFT' && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleConfirmOrder(selectedOrder.id)}
+                    className="h-8 text-xs font-semibold bg-brand-700 hover:bg-brand-800 text-white cursor-pointer shadow-2xs"
+                  >
+                    Confirm
+                  </Button>
+                )}
+
+                {selectedOrder.status === 'CONFIRMED' && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleGenerateInvoice(selectedOrder.id)}
+                    className="h-8 text-xs font-semibold bg-brand-700 hover:bg-brand-800 text-white cursor-pointer shadow-2xs"
+                  >
+                    <FileText size={13} className="mr-1.5" />
+                    Create Invoice
+                  </Button>
+                )}
+
+                {selectedOrder.status === 'INVOICED' && selectedOrder.invoiceId && (
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/invoices/${selectedOrder.invoiceId}`)}
+                    className="h-8 text-xs font-semibold bg-brand-700 hover:bg-brand-800 text-white cursor-pointer shadow-2xs"
+                  >
+                    <FileText size={13} className="mr-1.5" />
+                    Open Invoice ({selectedOrder.invoiceId})
+                  </Button>
+                )}
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setOrderNotice(`Sales Order ${selectedOrder.orderNumber} marked as cancelled.`);
+                    setSelectedOrder({ ...selectedOrder, status: 'DRAFT' });
+                    setTimeout(() => setOrderNotice(null), 3000);
+                  }}
+                  className="h-8 text-xs font-medium text-red-600 hover:bg-red-50 border-red-200 cursor-pointer"
+                >
+                  Cancel
+                </Button>
               </div>
-              <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
-                <X size={18} />
-              </button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={closeDetail}
+                  className="h-8 text-xs font-medium cursor-pointer border-slate-300"
+                >
+                  <ArrowLeft size={13} className="mr-1" />
+                  Back
+                </Button>
+                <button onClick={closeDetail} className="text-text-muted hover:text-navy-900 p-1 cursor-pointer">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
-            {/* Dates & Reference */}
-            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+            {/* Master Fields: SO No., Customer Name, SO Date */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50/80 rounded-xl border border-slate-200 text-xs">
               <div>
-                <span className="text-[10px] text-text-muted uppercase">Quotation Date</span>
-                <p className="font-semibold text-navy-900 mt-0.5">{selectedOrder.orderDate}</p>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">SO No.</span>
+                <p className="font-mono font-bold text-sm text-navy-900 mt-1">{selectedOrder.orderNumber}</p>
               </div>
               <div>
-                <span className="text-[10px] text-text-muted uppercase">Invoice Link</span>
-                <p className="font-semibold text-brand-700 mt-0.5">
-                  {selectedOrder.invoiceId ? (
-                    <Link to={`/invoices/${selectedOrder.invoiceId}`} className="hover:underline">
-                      {selectedOrder.invoiceId}
-                    </Link>
-                  ) : (
-                    'Pending Invoicing'
-                  )}
-                </p>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Customer Name</span>
+                <p className="font-semibold text-sm text-navy-900 mt-1">{selectedOrder.customerName}</p>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">SO Date</span>
+                <p className="font-medium text-sm text-navy-900 mt-1">{selectedOrder.orderDate}</p>
               </div>
             </div>
 
-            {/* Line Items */}
+            {/* Line Items Table: Sr. No., Product, Budget Analytics, Qty, Unit Price, Total */}
             <div>
               <span className="text-xs font-bold text-navy-900 uppercase tracking-wider block mb-2">
                 Order Line Items
               </span>
-              <div className="rounded-lg border border-surface-border overflow-hidden">
+              <div className="rounded-xl border border-surface-border overflow-hidden shadow-2xs">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-surface-border text-navy-600">
+                  <thead className="bg-slate-100/80 border-b border-surface-border text-navy-700 font-semibold">
                     <tr>
-                      <th className="p-2.5">Product</th>
-                      <th className="p-2.5 text-right">Qty</th>
-                      <th className="p-2.5 text-right">Unit Price</th>
-                      <th className="p-2.5 text-right">Tax (18%)</th>
-                      <th className="p-2.5 text-right">Total</th>
+                      <th className="p-3 text-center w-12">Sr. No.</th>
+                      <th className="p-3">Product</th>
+                      <th className="p-3">Budget Analytics</th>
+                      <th className="p-3 text-right">Qty</th>
+                      <th className="p-3 text-right">Unit Price</th>
+                      <th className="p-3 text-right">Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedOrder.lines.map((ln) => (
-                      <tr key={ln.id}>
-                        <td className="p-2.5 font-medium text-navy-900">{ln.productName}</td>
-                        <td className="p-2.5 text-right font-mono">{ln.quantity}</td>
-                        <td className="p-2.5 text-right font-mono">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono text-text-muted">₹{ln.taxAmount.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono font-semibold text-navy-900">
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {selectedOrder.lines.map((ln, idx) => (
+                      <tr key={ln.id} className="hover:bg-slate-50/60">
+                        <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                        <td className="p-3 font-semibold text-navy-900">{ln.productName}</td>
+                        <td className="p-3 text-xs text-navy-700">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-brand-50 text-brand-700 border border-brand-200/60">
+                            {ln.analyticAccountName || 'General Commercial Operations'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono font-medium">{ln.quantity}</td>
+                        <td className="p-3 text-right font-mono text-slate-700">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
+                        <td className="p-3 text-right font-mono font-bold text-navy-950">
                           ₹{ln.total.toLocaleString('en-IN')}
                         </td>
                       </tr>
@@ -574,7 +666,7 @@ export function SalesPage() {
             </div>
 
             {/* Totals Summary */}
-            <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+            <div className="p-4 bg-slate-50/90 rounded-xl border border-slate-200 text-xs space-y-2">
               <div className="flex justify-between text-navy-600">
                 <span>Subtotal</span>
                 <span className="font-mono">₹{selectedOrder.subtotal.toLocaleString('en-IN')}</span>
@@ -583,43 +675,10 @@ export function SalesPage() {
                 <span>GST (18%)</span>
                 <span className="font-mono">₹{selectedOrder.taxTotal.toLocaleString('en-IN')}</span>
               </div>
-              <div className="flex justify-between font-bold text-sm text-navy-900 pt-1 border-t border-slate-200">
+              <div className="flex justify-between font-bold text-base text-navy-950 pt-2 border-t border-slate-200">
                 <span>Grand Total</span>
-                <span className="font-mono">₹{selectedOrder.grandTotal.toLocaleString('en-IN')}</span>
+                <span className="font-mono text-brand-700">₹{selectedOrder.grandTotal.toLocaleString('en-IN')}</span>
               </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-surface-border">
-              {selectedOrder.status === 'DRAFT' && (
-                <Button
-                  size="sm"
-                  onClick={() => handleConfirmOrder(selectedOrder.id)}
-                  className="bg-navy-900 hover:bg-navy-800 text-white text-xs cursor-pointer"
-                >
-                  Confirm Order
-                </Button>
-              )}
-              {selectedOrder.status === 'CONFIRMED' && (
-                <Button
-                  size="sm"
-                  onClick={() => handleGenerateInvoice(selectedOrder.id)}
-                  className="bg-brand-700 hover:bg-brand-800 text-white text-xs cursor-pointer"
-                >
-                  <FileText size={13} className="mr-1.5" />
-                  Generate Invoice
-                </Button>
-              )}
-              {selectedOrder.status === 'INVOICED' && selectedOrder.invoiceId && (
-                <Link to={`/invoices/${selectedOrder.invoiceId}`}>
-                  <Button variant="outline" size="sm" className="text-xs cursor-pointer">
-                    Open Tax Invoice
-                  </Button>
-                </Link>
-              )}
-              <Button variant="outline" size="sm" onClick={closeDetail} className="cursor-pointer">
-                Close
-              </Button>
             </div>
           </div>
         </div>

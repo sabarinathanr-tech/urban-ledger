@@ -198,7 +198,7 @@ export function ContactsPage() {
     : [];
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary">
+    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto bg-surface-secondary">
       {/* Odoo Control Panel (Header, Search, Filters & View Switcher) */}
       <OdooControlPanel
         title="Contacts"
@@ -226,7 +226,7 @@ export function ContactsPage() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 max-w-7xl w-full mx-auto">
+      <div className="flex-1 px-4 sm:px-6 pt-4 pb-8 space-y-4 w-full max-w-7xl mx-auto">
         {notice && (
           <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-2xs">
             <div className="flex items-center gap-2">
@@ -578,7 +578,7 @@ export function ContactsPage() {
                 </div>
               </div>
 
-              {/* Portal User Account Provisioning (PS Page 1 Requirement) */}
+              {/* Portal User Account Provisioning */}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -592,7 +592,7 @@ export function ContactsPage() {
                   </span>
                 </label>
                 <p className="text-[11px] text-text-muted pl-6">
-                  Creates a portal credential so this contact can sign in to view their own customer invoices, supplier bills, and make digital payments (PS Page 1).
+                  Creates a portal credential so this contact can sign in to view their own customer invoices, supplier bills, and make digital payments.
                 </p>
               </div>
 
@@ -600,7 +600,7 @@ export function ContactsPage() {
                 <Button type="button" variant="outline" size="sm" onClick={closeModal}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white cursor-pointer">
                   Save Contact Master
                 </Button>
               </div>
@@ -648,7 +648,7 @@ export function ContactsPage() {
             <div className="rounded-lg p-3.5 bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
               <div>
                 <span className="text-[10px] text-text-muted uppercase font-bold tracking-wider">
-                  Portal Login Credentials (PS Page 1)
+                  Portal Login Credentials
                 </span>
                 {selectedContact.portalUser?.active ? (
                   <div className="flex items-center gap-1.5 mt-0.5 font-medium text-emerald-700">

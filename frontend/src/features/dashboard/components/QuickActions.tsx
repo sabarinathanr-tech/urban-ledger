@@ -19,9 +19,10 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 
 interface QuickActionsProps {
   actions: QuickAction[];
+  onAction?: (actionId: string) => void;
 }
 
-export function QuickActions({ actions }: QuickActionsProps) {
+export function QuickActions({ actions, onAction }: QuickActionsProps) {
   const navigate = useNavigate();
 
   return (
@@ -31,8 +32,14 @@ export function QuickActions({ actions }: QuickActionsProps) {
           <button
             key={action.id}
             type="button"
-            onClick={() => navigate(action.href)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-caption font-medium text-navy-600 transition-colors hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2"
+            onClick={() => {
+              if (onAction) {
+                onAction(action.id);
+              } else {
+                navigate(action.href);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-caption font-medium text-navy-600 transition-colors hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2 cursor-pointer shadow-2xs"
           >
             <Plus size={14} className="text-navy-400" />
             {ICON_MAP[action.icon] ?? <Package size={16} />}

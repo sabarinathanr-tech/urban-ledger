@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 interface AuthCardProps {
@@ -21,10 +21,10 @@ export const AuthCard: React.FC<AuthCardProps> = ({
   return (
     <div
       className={cn(
-        'w-full mx-auto bg-white dark:bg-[#181B20]',
+        'w-full h-full mx-auto bg-white dark:bg-[#181B20]',
         'border border-slate-200 dark:border-slate-800',
         'rounded-lg shadow-erp-subtle',
-        'p-6 sm:p-8 transition-colors',
+        'p-6 sm:p-8 flex flex-col justify-between transition-colors',
         widthClasses[maxWidth],
         className
       )}

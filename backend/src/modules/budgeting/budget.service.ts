@@ -28,6 +28,7 @@ const memoryBudgets = new Map<string, BudgetRecord>();
 const memoryAnalyticAccounts = new Map<string, AnalyticAccountRecord>();
 
 const initialAnalyticAccounts: AnalyticAccountRecord[] = [
+  { id: 'ana-0', name: 'Furniture Procurement', type: 'EXPENSES', description: 'Raw material and furniture procurement' },
   { id: 'ana-1', name: 'Wood Procurement (Expenses)', type: 'EXPENSES', description: 'Raw material procurement for furniture manufacture' },
   { id: 'ana-2', name: 'Operations & Utilities (Expenses)', type: 'EXPENSES', description: 'Factory operations, power, and workshop maintenance' },
   { id: 'ana-3', name: 'Showroom Marketing (Expenses)', type: 'EXPENSES', description: 'Urban showroom promotions and online reach' },
@@ -38,6 +39,19 @@ const initialAnalyticAccounts: AnalyticAccountRecord[] = [
 initialAnalyticAccounts.forEach((a) => memoryAnalyticAccounts.set(a.id, a));
 
 const initialBudgets: BudgetRecord[] = [
+  {
+    id: 'bdg-jan-2026',
+    name: 'January 2026',
+    analyticAccount: 'Furniture Procurement',
+    plannedAmount: 200000,
+    actualAmount: 10000,
+    remainingAmount: 190000,
+    utilization: 5,
+    status: 'HEALTHY',
+    startDate: '2026-01-01',
+    endDate: '2026-01-31',
+    responsibleUser: 'Mohith (Production Lead)',
+  },
   {
     id: 'bgt-1',
     name: 'Timber & Raw Materials Procurement',

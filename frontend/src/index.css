@@ -1,4 +1,4 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -35,5 +35,60 @@
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: theme('colors.surface.border') transparent;
+  }
+}
+
+@media print {
+  /* Hide application chrome: headers, navbars, sidebars, and control panels */
+  header,
+  nav,
+  aside,
+  .no-print,
+  .print\:hidden,
+  [data-no-print="true"] {
+    display: none !important;
+  }
+
+  /* Reset body and container backgrounds for pristine print output */
+  html,
+  body,
+  #root,
+  main {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Remove backdrop tints from print preview modals */
+  .fixed {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Remove outer box shadows in print */
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-2xl,
+  .shadow-2xs {
+    box-shadow: none !important;
+  }
+
+  @page {
+    margin: 1.2cm;
+    size: auto;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

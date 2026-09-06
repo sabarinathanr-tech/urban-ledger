@@ -29,8 +29,11 @@ import {
   type PaymentItem,
   type AccountItem,
   type JournalItem,
+  type JournalLine,
   type JournalEntry,
   type BudgetHealthItem,
+  type BudgetStage,
+  type BudgetLine,
   type AnalyticAccountItem,
 } from '@/data/erpData';
 import apiClient from '@/lib/axios';
@@ -106,11 +109,54 @@ interface ERPContextType {
 
   addBudget: (budget: {
     name: string;
-    period: string;
-    responsible: string;
-    analyticAccount: string;
-    plannedAmount: number;
+    period?: string;
+    startDate?: string;
+    endDate?: string;
+    responsible?: string;
+    analyticAccount?: string;
+    plannedAmount?: number;
+    stage?: BudgetStage;
+    lines?: BudgetLine[];
   }) => BudgetHealthItem;
+  updateBudget: (id: string, updates: Partial<BudgetHealthItem>) => BudgetHealthItem | undefined;
+  confirmBudget: (id: string) => BudgetHealthItem | undefined;
+  reviseBudget: (id: string, newCommitted?: number) => { oldBudget: BudgetHealthItem; newBudget: BudgetHealthItem } | undefined;
+  cancelBudget: (id: string) => BudgetHealthItem | undefined;
+  resetBudgetToDraft: (id: string) => BudgetHealthItem | undefined;
+  deleteBudget: (id: string) => void;
+
+  addAccount: (account: {
+    name: string;
+    code?: string;
+    type: AccountItem['type'];
+    initialBalance?: number;
+  }) => AccountItem;
+
+  addJournal: (journal: {
+    name: string;
+    type: JournalItem['type'];
+    defaultAccountId: string;
+    code?: string;
+  }) => JournalItem;
+
+  createManualJournalEntry: (entry: {
+    date: string;
+    journalId: string;
+    reference: string;
+    status?: 'POSTED' | 'DRAFT';
+    partnerId?: string;
+    partnerName?: string;
+    lines: Array<{
+      accountId: string;
+      partnerId?: string;
+      partnerName?: string;
+      debit: number;
+      credit: number;
+    }>;
+  }) => JournalEntry;
+
+  postJournalEntry: (entryId: string) => void;
+  resetJournalEntryToDraft: (entryId: string) => void;
 
   // Real-time Dashboard Summary derivation
   getDashboardMetricsData: () => {
@@ -510,20 +556,73 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         Array.isArray(budgetsRes.value.data?.data) &&
         budgetsRes.value.data.data.length > 0
       ) {
-        setBudgets(
-          budgetsRes.value.data.data.map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            period: b.startDate ? `${b.startDate} to ${b.endDate}` : 'FY 2026-27',
-            responsible: b.responsibleUser || 'Lead Accountant',
-            analyticAccount: b.analyticAccount,
-            plannedAmount: Number(b.plannedAmount),
-            actualAmount: Number(b.actualAmount || 0),
-            remainingAmount: Number(b.remainingAmount || 0),
-            utilization: Number(b.utilization || 0),
-            status: b.status || 'HEALTHY',
-          }))
-        );
+        setBudgets((prev) => {
+          const backendItems: BudgetHealthItem[] = budgetsRes.value.data.data.map((b: any) => {
+            const existing = prev.find((p) => p.id === b.id);
+            const planned = Number(b.plannedAmount || existing?.plannedAmount || 100000);
+            const actual = Number(b.actualAmount ?? existing?.actualAmount ?? 0);
+            const remaining = Number(b.remainingAmount ?? (planned - actual));
+            const utilization = Number(
+              b.utilization ?? (planned > 0 ? Math.round((actual / planned) * 100) : 0)
+            );
+            const stage: BudgetStage = existing?.stage || 'CONFIRM';
+
+            const lines: BudgetLine[] =
+              existing?.lines && existing.lines.length > 0
+                ? existing.lines
+                : [
+                    {
+                      id: `bl-${b.id}-1`,
+                      analyticAccountId: 'ana-0',
+                      analyticAccountName: b.analyticAccount || 'Furniture Procurement',
+                      type: 'EXPENSE',
+                      committedAmount: planned,
+                      achievedAmount: actual,
+                      achievedPercent:
+                        planned > 0 ? Math.round((actual / planned) * 10000) / 100 : 0,
+                      amountToAchieve: Math.max(0, planned - actual),
+                    },
+                  ];
+
+            return {
+              id: b.id,
+              name: b.name,
+              period:
+                b.startDate && b.endDate
+                  ? `${b.startDate} to ${b.endDate}`
+                  : existing?.period || 'January 2026',
+              startDate: b.startDate || existing?.startDate || '2026-01-01',
+              endDate: b.endDate || existing?.endDate || '2026-01-31',
+              responsible:
+                b.responsibleUser || existing?.responsible || 'Mohith (Production Lead)',
+              analyticAccount:
+                b.analyticAccount || existing?.analyticAccount || 'Furniture Procurement',
+              stage,
+              revisionOfId: existing?.revisionOfId,
+              revisionOfName: existing?.revisionOfName,
+              revisedWithId: existing?.revisedWithId,
+              revisedWithName: existing?.revisedWithName,
+              lines,
+              plannedAmount: planned,
+              actualAmount: actual,
+              remainingAmount: remaining,
+              utilization,
+              status:
+                b.status ||
+                (utilization > 100
+                  ? 'EXCEEDED'
+                  : utilization >= 80
+                  ? 'WARNING'
+                  : 'HEALTHY'),
+            };
+          });
+
+          const localOnly = prev.filter(
+            (p) => !backendItems.some((bi) => bi.id === p.id)
+          );
+
+          return [...localOnly, ...backendItems];
+        });
       }
 
       if (
@@ -531,14 +630,20 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         Array.isArray(analyticAccountsRes.value.data?.data) &&
         analyticAccountsRes.value.data.data.length > 0
       ) {
-        setAnalyticAccounts(
-          analyticAccountsRes.value.data.data.map((a: any) => ({
-            id: a.id,
-            name: a.name,
-            type: a.type || 'EXPENSES',
-            description: a.description,
-          }))
-        );
+        setAnalyticAccounts((prev) => {
+          const backendItems: AnalyticAccountItem[] = analyticAccountsRes.value.data.data.map(
+            (a: any) => ({
+              id: a.id,
+              name: a.name,
+              type: a.type || 'EXPENSES',
+              description: a.description,
+            })
+          );
+          const localOnly = prev.filter(
+            (p) => !backendItems.some((bi) => bi.id === p.id || bi.name === p.name)
+          );
+          return [...localOnly, ...backendItems];
+        });
       }
     } catch {
       // Retrying silently in background
@@ -568,7 +673,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   }, [refreshFromBackend]);
   const createSalesOrder = useCallback((order: Omit<SalesOrder, 'id' | 'orderNumber'> & { status?: SalesOrder['status'] }): SalesOrder => {
     const id = `so-${Date.now()}`;
-    const orderNumber = `SO-2026-00${salesOrders.length + 1}`;
+    const orderNumber = `S${String(salesOrders.length + 1).padStart(5, '0')}`;
     const newSO: SalesOrder = {
       ...order,
       id,
@@ -604,7 +709,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   }, [refreshFromBackend]);
 
   const generateInvoiceFromSO = useCallback((orderId: string): Invoice | null => {
-    const order = salesOrders.find((so) => so.id === orderId);
+    const order = salesOrders.find((o) => o.id === orderId);
     if (!order) return null;
 
     const today = new Date().toISOString().split('T')[0];
@@ -613,7 +718,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     const dueDate = dueDateObj.toISOString().split('T')[0];
 
     const invId = `inv-${Date.now()}`;
-    const invNumber = `INV-2026-00${invoices.length + 1}`;
+    const invNumber = `INV/2026/${String(invoices.length + 1).padStart(4, '0')}`;
     const jeId = `je-${Date.now()}`;
     const jeNumber = `JE-2026-00${journalEntries.length + 1}`;
 
@@ -632,6 +737,9 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       amountPaid: 0,
       balanceDue: order.grandTotal,
       journalEntryId: jeId,
+      soId: order.id,
+      soNumber: order.orderNumber,
+      invoiceReference: `ABC-26-${String(invoices.length + 1).padStart(3, '0')}`,
     };
 
     // Double Entry:
@@ -718,7 +826,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   // ────────────────────────────────────────────────────────
   const createPurchaseOrder = useCallback((po: Omit<PurchaseOrder, 'id' | 'poNumber'> & { status?: PurchaseOrder['status'] }): PurchaseOrder => {
     const id = `po-${Date.now()}`;
-    const poNumber = `PO-2026-00${purchaseOrders.length + 1}`;
+    const poNumber = `P${String(purchaseOrders.length + 1).padStart(5, '0')}`;
     const newPO: PurchaseOrder = {
       ...po,
       id,
@@ -762,7 +870,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     const dueDate = dueDateObj.toISOString().split('T')[0];
 
     const billId = `bill-${Date.now()}`;
-    const billNumber = `BILL-2026-00${bills.length + 1}`;
+    const billNumber = `Bill/2026/${String(bills.length + 1).padStart(4, '0')}`;
     const jeId = `je-${Date.now()}`;
     const jeNumber = `JE-2026-00${journalEntries.length + 1}`;
 
@@ -781,6 +889,9 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       amountPaid: 0,
       balanceDue: po.grandTotal,
       journalEntryId: jeId,
+      poId: po.id,
+      poNumber: po.poNumber,
+      billReference: `ABC-26-${String(bills.length + 1).padStart(3, '0')}`,
     };
 
     // Double Entry:
@@ -864,7 +975,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   // ────────────────────────────────────────────────────────
   const createInvoice = useCallback((inv: Omit<Invoice, 'id' | 'invoiceNumber' | 'journalEntryId'>): Invoice => {
     const invId = `inv-${Date.now()}`;
-    const invNumber = `INV-2026-00${invoices.length + 1}`;
+    const invNumber = `INV/2026/${String(invoices.length + 1).padStart(4, '0')}`;
     const jeId = `je-${Date.now()}`;
     const jeNumber = `JE-2026-00${journalEntries.length + 1}`;
 
@@ -873,6 +984,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       id: invId,
       invoiceNumber: invNumber,
       journalEntryId: jeId,
+      invoiceReference: inv.invoiceReference || `ABC-26-${String(invoices.length + 1).padStart(3, '0')}`,
     };
 
     const newJE: JournalEntry = {
@@ -954,7 +1066,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
 
   const createBill = useCallback((b: Omit<Bill, 'id' | 'billNumber' | 'journalEntryId'>): Bill => {
     const billId = `bill-${Date.now()}`;
-    const billNumber = `BILL-2026-00${bills.length + 1}`;
+    const billNumber = `Bill/2026/${String(bills.length + 1).padStart(4, '0')}`;
     const jeId = `je-${Date.now()}`;
     const jeNumber = `JE-2026-00${journalEntries.length + 1}`;
 
@@ -963,6 +1075,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       id: billId,
       billNumber,
       journalEntryId: jeId,
+      billReference: b.billReference || `ABC-26-${String(bills.length + 1).padStart(3, '0')}`,
     };
 
     const newJE: JournalEntry = {
@@ -1494,33 +1607,61 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   // ────────────────────────────────────────────────────────
   const addBudget = useCallback((budget: {
     name: string;
-    period: string;
-    responsible: string;
-    analyticAccount: string;
-    plannedAmount: number;
+    period?: string;
+    startDate?: string;
+    endDate?: string;
+    responsible?: string;
+    analyticAccount?: string;
+    plannedAmount?: number;
+    stage?: BudgetStage;
+    lines?: BudgetLine[];
   }): BudgetHealthItem => {
+    const lines: BudgetLine[] = budget.lines && budget.lines.length > 0 ? budget.lines : [
+      {
+        id: `bl-${Date.now()}-1`,
+        analyticAccountId: 'ana-0',
+        analyticAccountName: budget.analyticAccount || 'Furniture Procurement',
+        type: 'EXPENSE',
+        committedAmount: budget.plannedAmount || 100000,
+        achievedAmount: 0,
+        achievedPercent: 0,
+        amountToAchieve: budget.plannedAmount || 100000,
+      },
+    ];
+
+    const planned = lines.reduce((s, l) => s + Number(l.committedAmount || 0), 0) || (budget.plannedAmount || 0);
+    const actual = lines.reduce((s, l) => s + Number(l.achievedAmount || 0), 0);
+    const remaining = planned - actual;
+    const utilization = planned > 0 ? Math.round((actual / planned) * 100) : 0;
+    const status: 'HEALTHY' | 'WARNING' | 'EXCEEDED' =
+      utilization > 100 ? 'EXCEEDED' : utilization >= 80 ? 'WARNING' : 'HEALTHY';
+
     const newB: BudgetHealthItem = {
       id: `bdg-${Date.now()}`,
       name: budget.name,
-      period: budget.period,
-      responsible: budget.responsible,
-      analyticAccount: budget.analyticAccount,
-      plannedAmount: budget.plannedAmount,
-      actualAmount: 0,
-      remainingAmount: budget.plannedAmount,
-      utilization: 0,
-      status: 'HEALTHY',
+      period: budget.period || `${budget.startDate || '2026-01-01'} to ${budget.endDate || '2026-01-31'}`,
+      startDate: budget.startDate || '2026-01-01',
+      endDate: budget.endDate || '2026-01-31',
+      responsible: budget.responsible || 'Mohith (Production Lead)',
+      analyticAccount: budget.analyticAccount || lines[0]?.analyticAccountName || 'Furniture Procurement',
+      stage: budget.stage || 'DRAFT',
+      lines,
+      plannedAmount: planned,
+      actualAmount: actual,
+      remainingAmount: remaining,
+      utilization,
+      status,
     };
     setBudgets((prev) => [newB, ...prev]);
 
     apiClient
       .post('/budgeting/budgets', {
         name: budget.name,
-        analyticAccount: budget.analyticAccount,
-        plannedAmount: budget.plannedAmount,
-        startDate: '2026-04-01',
-        endDate: '2026-09-30',
-        responsibleUser: budget.responsible,
+        analyticAccount: newB.analyticAccount,
+        plannedAmount: planned,
+        startDate: newB.startDate,
+        endDate: newB.endDate,
+        responsibleUser: newB.responsible,
       })
       .catch((e) => console.warn('Sync budget error:', e))
       .finally(() => {
@@ -1530,6 +1671,418 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     return newB;
   }, [refreshFromBackend]);
 
+  const updateBudget = useCallback((id: string, updates: Partial<BudgetHealthItem>): BudgetHealthItem | undefined => {
+    let updatedItem: BudgetHealthItem | undefined;
+    setBudgets((prev) =>
+      prev.map((b) => {
+        if (b.id === id) {
+          const merged: BudgetHealthItem = { ...b, ...updates };
+          if (updates.lines) {
+            const planned = updates.lines.reduce((s, l) => s + Number(l.committedAmount || 0), 0);
+            const actual = updates.lines.reduce((s, l) => s + Number(l.achievedAmount || 0), 0);
+            merged.plannedAmount = planned;
+            merged.actualAmount = actual;
+            merged.remainingAmount = planned - actual;
+            merged.utilization = planned > 0 ? Math.round((actual / planned) * 100) : 0;
+            merged.status =
+              merged.utilization > 100 ? 'EXCEEDED' : merged.utilization >= 80 ? 'WARNING' : 'HEALTHY';
+          }
+          updatedItem = merged;
+          return merged;
+        }
+        return b;
+      })
+    );
+    return updatedItem;
+  }, []);
+
+  const confirmBudget = useCallback((id: string): BudgetHealthItem | undefined => {
+    return updateBudget(id, { stage: 'CONFIRM' });
+  }, [updateBudget]);
+
+  const reviseBudget = useCallback(
+    (id: string, newCommitted?: number): { oldBudget: BudgetHealthItem; newBudget: BudgetHealthItem } | undefined => {
+      const original = budgets.find((b) => b.id === id);
+      if (!original) return undefined;
+
+      const revisionId = `bdg-${Date.now()}`;
+      const baseName = original.name.replace(/\s*\(Rev\s*\d+\)$/i, '').replace(/\s*Revised(\s*Revised)*$/i, '').trim();
+      const existingRevs = budgets.filter(
+        (b) => b.name.startsWith(baseName) && (b.revisionOfId === id || b.revisionOfName === original.name)
+      );
+      const revNum = existingRevs.length + 1;
+      const revisionName = `${baseName} (Rev ${revNum})`;
+
+      const revisedLines: BudgetLine[] = (original.lines && original.lines.length > 0
+        ? original.lines
+        : [
+            {
+              id: `bl-${Date.now()}-1`,
+              analyticAccountId: 'ana-0',
+              analyticAccountName: original.analyticAccount || 'Furniture Procurement',
+              type: 'EXPENSE',
+              committedAmount: original.plannedAmount || 200000,
+              achievedAmount: original.actualAmount || 0,
+              achievedPercent: original.utilization || 0,
+              amountToAchieve: (original.plannedAmount || 200000) - (original.actualAmount || 0),
+            },
+          ]
+      ).map((l, idx): BudgetLine => {
+        const comm = newCommitted !== undefined && idx === 0 ? newCommitted : l.committedAmount;
+        const ach = l.achievedAmount;
+        return {
+          id: `line-${Date.now()}-${idx + 1}`,
+          analyticAccountId: l.analyticAccountId,
+          analyticAccountName: l.analyticAccountName,
+          type: (l.type === 'INCOME' ? 'INCOME' : 'EXPENSE') as 'INCOME' | 'EXPENSE',
+          committedAmount: comm,
+          achievedAmount: ach,
+          achievedPercent: comm > 0 ? Math.round((ach / comm) * 10000) / 100 : 0,
+          amountToAchieve: comm - ach,
+        };
+      });
+
+      const planned = revisedLines.reduce((s, l) => s + Number(l.committedAmount || 0), 0);
+      const actual = revisedLines.reduce((s, l) => s + Number(l.achievedAmount || 0), 0);
+      const remaining = planned - actual;
+      const utilization = planned > 0 ? Math.round((actual / planned) * 100) : 0;
+
+      const newRevision: BudgetHealthItem = {
+        id: revisionId,
+        name: revisionName,
+        period: original.period,
+        startDate: original.startDate,
+        endDate: original.endDate,
+        responsible: original.responsible,
+        stage: 'CONFIRM',
+        revisionOfId: original.id,
+        revisionOfName: original.name,
+        lines: revisedLines,
+        analyticAccount: original.analyticAccount,
+        plannedAmount: planned,
+        actualAmount: actual,
+        remainingAmount: remaining,
+        utilization,
+        status: utilization > 100 ? 'EXCEEDED' : utilization >= 80 ? 'WARNING' : 'HEALTHY',
+      };
+
+      const updatedOld: BudgetHealthItem = {
+        ...original,
+        stage: 'REVISED',
+        revisedWithId: revisionId,
+        revisedWithName: revisionName,
+      };
+
+      setBudgets((prev) => [
+        newRevision,
+        ...prev.map((b) => (b.id === id ? updatedOld : b)),
+      ]);
+
+      return { oldBudget: updatedOld, newBudget: newRevision };
+    },
+    [budgets, updateBudget]
+  );
+
+  const cancelBudget = useCallback((id: string): BudgetHealthItem | undefined => {
+    return updateBudget(id, { stage: 'CANCELED' });
+  }, [updateBudget]);
+
+  const resetBudgetToDraft = useCallback((id: string): BudgetHealthItem | undefined => {
+    return updateBudget(id, { stage: 'DRAFT' });
+  }, [updateBudget]);
+
+  const deleteBudget = useCallback((id: string) => {
+    setBudgets((prev) => prev.filter((b) => b.id !== id));
+  }, []);
+
+  // ────────────────────────────────────────────────────────
+  // ACCOUNTING: CHART OF ACCOUNTS, JOURNALS & MANUAL POSTING
+  // ────────────────────────────────────────────────────────
+  const addAccount = useCallback(
+    (data: {
+      name: string;
+      code?: string;
+      type: AccountItem['type'];
+      initialBalance?: number;
+    }) => {
+      const newId = `acc-${Date.now()}`;
+      let prefix = '1';
+      if (['ASSET', 'BANK', 'CASH'].includes(data.type)) prefix = '1';
+      else if (['LIABILITY', 'CAPITAL', 'EQUITY'].includes(data.type)) prefix = '2';
+      else if (data.type === 'INCOME') prefix = '4';
+      else prefix = '5';
+
+      const code = data.code || `${prefix}${Math.floor(100 + Math.random() * 900)}`;
+      const newAcc: AccountItem = {
+        id: newId,
+        code,
+        name: data.name,
+        type: data.type,
+        balance: Number(data.initialBalance || 0),
+        currency: 'INR',
+      };
+
+      setAccounts((prev) => [...prev, newAcc]);
+      return newAcc;
+    },
+    []
+  );
+
+  const addJournal = useCallback(
+    (data: {
+      name: string;
+      type: JournalItem['type'];
+      defaultAccountId: string;
+      code?: string;
+    }) => {
+      const newId = `jrn-${Date.now()}`;
+      const defaultAccount = accounts.find((a) => a.id === data.defaultAccountId);
+      const code = data.code || data.type.substring(0, 4).toUpperCase();
+
+      const newJrn: JournalItem = {
+        id: newId,
+        code,
+        name: data.name,
+        type: data.type,
+        defaultAccountId: data.defaultAccountId,
+        defaultAccountName: defaultAccount?.name,
+        entriesCount: 0,
+      };
+
+      setJournals((prev) => [...prev, newJrn]);
+      return newJrn;
+    },
+    [accounts]
+  );
+
+  const createManualJournalEntry = useCallback(
+    (entry: {
+      date: string;
+      journalId: string;
+      reference: string;
+      status?: 'POSTED' | 'DRAFT';
+      partnerId?: string;
+      partnerName?: string;
+      lines: Array<{
+        accountId: string;
+        partnerId?: string;
+        partnerName?: string;
+        debit: number;
+        credit: number;
+      }>;
+    }) => {
+      const totalDebit = Number(
+        entry.lines.reduce((s, l) => s + Number(l.debit || 0), 0).toFixed(2)
+      );
+      const totalCredit = Number(
+        entry.lines.reduce((s, l) => s + Number(l.credit || 0), 0).toFixed(2)
+      );
+      const diff = Math.abs(totalDebit - totalCredit);
+      if (diff > 0.01) {
+        throw new Error(
+          `Unbalanced entry! Debit (₹${totalDebit}) must equal Credit (₹${totalCredit}). Discrepancy: ₹${diff.toFixed(2)}`
+        );
+      }
+
+      const journal = journals.find((j) => j.id === entry.journalId) || journals[0];
+      const entrySeq = String(journalEntries.length + 1).padStart(3, '0');
+      const entryNumber = `JE-2026-${entrySeq}`;
+
+      let defaultPartnerName = entry.partnerName;
+      if (!defaultPartnerName && entry.partnerId) {
+        const c = contacts.find((ct) => ct.id === entry.partnerId);
+        if (c) defaultPartnerName = c.name;
+      }
+      if (!defaultPartnerName) {
+        const lineWithPartner = entry.lines.find((l) => l.partnerName || l.partnerId);
+        if (lineWithPartner) {
+          if (lineWithPartner.partnerName) {
+            defaultPartnerName = lineWithPartner.partnerName;
+          } else if (lineWithPartner.partnerId) {
+            const c = contacts.find((ct) => ct.id === lineWithPartner.partnerId);
+            if (c) defaultPartnerName = c.name;
+          }
+        }
+      }
+
+      const enrichedLines: JournalLine[] = entry.lines.map((l) => {
+        const acc = accounts.find((a) => a.id === l.accountId);
+        let pName = l.partnerName;
+        if (!pName && l.partnerId) {
+          const c = contacts.find((ct) => ct.id === l.partnerId);
+          if (c) pName = c.name;
+        }
+        return {
+          accountId: l.accountId,
+          accountCode: acc?.code || '',
+          accountName: acc?.name || 'Account',
+          partnerId: l.partnerId,
+          partnerName: pName,
+          debit: Number(l.debit || 0),
+          credit: Number(l.credit || 0),
+        };
+      });
+
+      const entryStatus = entry.status || 'POSTED';
+      const newJE: JournalEntry = {
+        id: `je-${Date.now()}`,
+        entryNumber,
+        date: entry.date,
+        reference: entry.reference,
+        partnerName: defaultPartnerName,
+        journalCode: journal ? journal.code : 'MISC',
+        journalName: journal ? journal.name : 'Miscellaneous Operations',
+        status: entryStatus,
+        lines: enrichedLines,
+        totalDebit,
+        totalCredit,
+        isBalanced: true,
+      };
+
+      if (entryStatus === 'POSTED') {
+        // Update account balances according to standard accounting equation
+        setAccounts((prev) =>
+          prev.map((acc) => {
+            const linesForAcc = enrichedLines.filter((l) => l.accountId === acc.id);
+            if (linesForAcc.length === 0) return acc;
+            let change = 0;
+            linesForAcc.forEach((l) => {
+              if (['ASSET', 'EXPENSE', 'BANK', 'CASH', 'OTHER_EXPENSE'].includes(acc.type)) {
+                change += l.debit - l.credit;
+              } else {
+                change += l.credit - l.debit;
+              }
+            });
+            return {
+              ...acc,
+              balance: Number((acc.balance + change).toFixed(2)),
+            };
+          })
+        );
+
+        // Increment entriesCount on the targeted journal
+        setJournals((prev) =>
+          prev.map((j) =>
+            j.id === entry.journalId ? { ...j, entriesCount: j.entriesCount + 1 } : j
+          )
+        );
+
+        // Fire and forget backend sync if online
+        apiClient
+          .post('/accounting/journal-entries', {
+            journalId: entry.journalId,
+            date: entry.date,
+            reference: entry.reference,
+            lines: enrichedLines.map((l) => ({
+              accountId: l.accountId,
+              debit: l.debit,
+              credit: l.credit,
+              description: entry.reference,
+            })),
+          })
+          .catch(() => {
+            // In-memory/localStorage state already recorded
+          });
+      }
+
+      // Prepend new entry
+      setJournalEntries((prev) => [newJE, ...prev]);
+
+      return newJE;
+    },
+    [accounts, contacts, journalEntries.length, journals]
+  );
+
+  const postJournalEntry = useCallback(
+    (entryId: string) => {
+      setJournalEntries((prevEntries) => {
+        const target = prevEntries.find((je) => je.id === entryId);
+        if (!target || target.status === 'POSTED') return prevEntries;
+
+        // Apply ledger balance updates if entry is balanced
+        if (target.isBalanced && target.lines.length > 0) {
+          setAccounts((prevAccounts) =>
+            prevAccounts.map((acc) => {
+              const linesForAcc = target.lines.filter((l) => l.accountId === acc.id);
+              if (linesForAcc.length === 0) return acc;
+              let change = 0;
+              linesForAcc.forEach((l) => {
+                if (['ASSET', 'EXPENSE', 'BANK', 'CASH', 'OTHER_EXPENSE'].includes(acc.type)) {
+                  change += l.debit - l.credit;
+                } else {
+                  change += l.credit - l.debit;
+                }
+              });
+              return {
+                ...acc,
+                balance: Number((acc.balance + change).toFixed(2)),
+              };
+            })
+          );
+
+          // Increment journal count
+          setJournals((prevJournals) =>
+            prevJournals.map((j) =>
+              j.name.toLowerCase() === target.journalName.toLowerCase() || j.code === target.journalCode
+                ? { ...j, entriesCount: j.entriesCount + 1 }
+                : j
+            )
+          );
+        }
+
+        return prevEntries.map((je) =>
+          je.id === entryId ? { ...je, status: 'POSTED' } : je
+        );
+      });
+    },
+    []
+  );
+
+  const resetJournalEntryToDraft = useCallback(
+    (entryId: string) => {
+      setJournalEntries((prevEntries) => {
+        const target = prevEntries.find((je) => je.id === entryId);
+        if (!target || target.status === 'DRAFT') return prevEntries;
+
+        // Revert ledger balance updates
+        if (target.isBalanced && target.lines.length > 0) {
+          setAccounts((prevAccounts) =>
+            prevAccounts.map((acc) => {
+              const linesForAcc = target.lines.filter((l) => l.accountId === acc.id);
+              if (linesForAcc.length === 0) return acc;
+              let change = 0;
+              linesForAcc.forEach((l) => {
+                if (['ASSET', 'EXPENSE', 'BANK', 'CASH', 'OTHER_EXPENSE'].includes(acc.type)) {
+                  change += l.debit - l.credit;
+                } else {
+                  change += l.credit - l.debit;
+                }
+              });
+              return {
+                ...acc,
+                balance: Number((acc.balance - change).toFixed(2)),
+              };
+            })
+          );
+
+          // Decrement journal count
+          setJournals((prevJournals) =>
+            prevJournals.map((j) =>
+              (j.name.toLowerCase() === target.journalName.toLowerCase() || j.code === target.journalCode) && j.entriesCount > 0
+                ? { ...j, entriesCount: j.entriesCount - 1 }
+                : j
+            )
+          );
+        }
+
+        return prevEntries.map((je) =>
+          je.id === entryId ? { ...je, status: 'DRAFT' } : je
+        );
+      });
+    },
+    []
+  );
+
   // ────────────────────────────────────────────────────────
   // DYNAMIC DASHBOARD METRICS CALCULATION
   // ────────────────────────────────────────────────────────
@@ -1537,12 +2090,16 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     const revenueAccounts = accounts.filter((a) => a.type === 'INCOME');
     const revenue = revenueAccounts.reduce((sum, a) => sum + a.balance, 0);
 
-    const expenseAccounts = accounts.filter((a) => a.type === 'EXPENSE');
+    const expenseAccounts = accounts.filter(
+      (a) => a.type === 'EXPENSE' || a.type === 'OTHER_EXPENSE'
+    );
     const expenses = expenseAccounts.reduce((sum, a) => sum + a.balance, 0);
 
     const netProfit = revenue - expenses;
 
-    const cashBankAccs = accounts.filter((a) => a.id === 'acc-1001' || a.id === 'acc-1002');
+    const cashBankAccs = accounts.filter(
+      (a) => a.id === 'acc-1001' || a.id === 'acc-1002' || a.type === 'BANK' || a.type === 'CASH'
+    );
     const cashBank = cashBankAccs.reduce((sum, a) => sum + a.balance, 0);
 
     const recAcc = accounts.find((a) => a.id === 'acc-1003');
@@ -1618,6 +2175,17 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         toggleProductActive,
         addAnalyticAccount,
         addBudget,
+        updateBudget,
+        confirmBudget,
+        reviseBudget,
+        cancelBudget,
+        resetBudgetToDraft,
+        deleteBudget,
+        addAccount,
+        addJournal,
+        createManualJournalEntry,
+        postJournalEntry,
+        resetJournalEntryToDraft,
         getDashboardMetricsData,
         refreshERPData: refreshFromBackend,
         resetDemoData,

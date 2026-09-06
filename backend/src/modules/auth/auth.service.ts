@@ -35,7 +35,86 @@ const ACCOUNTANT_HASH = bcrypt.hashSync('Accountant@12345', 10);
 const CONTACT_HASH = bcrypt.hashSync('Contact@12345', 10);
 const DEFAULT_DEV_HASH = bcrypt.hashSync('Password@123', 10);
 
+const ADMIN_GMAIL_HASH = bcrypt.hashSync('admin@123', 10);
+const ACCOUNTANT_GMAIL_HASH = bcrypt.hashSync('accountant@123', 10);
+const ROHITH_HASH = bcrypt.hashSync('rohith@123', 10);
+const MOHIT_HASH = bcrypt.hashSync('mohit@123', 10);
+
 const memoryUsers = new Map<string, MemoryUser>([
+  [
+    'usr_admin_gmail',
+    {
+      id: 'usr_admin_gmail',
+      name: 'Admin',
+      email: 'admin@gmail.com',
+      mobile: '+91 9876543200',
+      passwordHash: ADMIN_GMAIL_HASH,
+      role: ROLES.ADMIN,
+      status: 'ACTIVE',
+      contact: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ],
+  [
+    'usr_accountant_gmail',
+    {
+      id: 'usr_accountant_gmail',
+      name: 'Mohith Accountant',
+      email: 'accountant@gmail.com',
+      mobile: '+91 9876543201',
+      passwordHash: ACCOUNTANT_GMAIL_HASH,
+      role: ROLES.ACCOUNTANT,
+      status: 'ACTIVE',
+      contact: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ],
+  [
+    'usr_rohith_gmail',
+    {
+      id: 'usr_rohith_gmail',
+      name: 'Rohith',
+      email: 'rohith@gmail.com',
+      mobile: '+91 9876543220',
+      passwordHash: ROHITH_HASH,
+      role: ROLES.CONTACT,
+      status: 'ACTIVE',
+      contact: {
+        id: 'cnt_rohith_customer',
+        name: 'Rohith',
+        email: 'rohith@gmail.com',
+        mobile: '+91 9876543220',
+        type: CONTACT_TYPES.CUSTOMER,
+        status: 'ACTIVE',
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ],
+  [
+    'usr_mohit_gmail',
+    {
+      id: 'usr_mohit_gmail',
+      name: 'Mohit',
+      email: 'mohit@gmail.com',
+      mobile: '+91 9876543221',
+      passwordHash: MOHIT_HASH,
+      role: ROLES.CONTACT,
+      status: 'ACTIVE',
+      contact: {
+        id: 'cnt_mohit_vendor',
+        name: 'Mohit Timber & Hardware',
+        email: 'mohit@gmail.com',
+        mobile: '+91 9876543221',
+        type: CONTACT_TYPES.VENDOR,
+        status: 'ACTIVE',
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ],
   [
     '11111111-1111-1111-1111-111111111111',
     {
@@ -323,11 +402,12 @@ export class AuthService {
         existingUser = await prisma.user.findUnique({
           where: { email: normalizedEmail },
         });
-      } catch {
-        existingUser = Array.from(memoryUsers.values()).find((u) => u.email === normalizedEmail) || null;
+      } catch (err) {
+        logger.warn('Prisma findUnique error during signup email check:', err instanceof Error ? err.message : String(err));
       }
-    } else {
-      existingUser = Array.from(memoryUsers.values()).find((u) => u.email === normalizedEmail) || null;
+    }
+    if (!existingUser) {
+      existingUser = Array.from(memoryUsers.values()).find((u) => u.email.toLowerCase().trim() === normalizedEmail) || null;
     }
 
     if (existingUser) {
@@ -390,7 +470,12 @@ export class AuthService {
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         };
-      } catch (dbError) {
+      } catch (dbError: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const errAny = dbError as any;
+        if (errAny?.code === 'P2002' || errAny?.message?.includes('Unique constraint') || errAny?.message?.includes('users_email_key')) {
+          throw new ConflictError('An account with this email already exists.', ERROR_CODES.USER_EXISTS);
+        }
         logger.warn('Prisma create failed, falling back to memory store:', dbError instanceof Error ? dbError.message : String(dbError));
         createdUser = this.createMemoryUser(input, normalizedEmail, mobile, passwordHash, role);
       }

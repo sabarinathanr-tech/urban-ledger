@@ -4,6 +4,7 @@ import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/app/config';
 import { useERP } from '@/context/ERPContext';
+import { useAuth } from '@/context/AuthContext';
 import type { DashboardData, RecentTransaction, BudgetHealthItem, BudgetStatus, TransactionStatus } from '../types';
 import { getDashboardSummary } from '../api';
 
@@ -21,6 +22,9 @@ import { AccountingHealthCard } from '../components/AccountingHealthCard';
 import { RecentTransactions } from '../components/RecentTransactions';
 import { ReportsSection } from '../components/ReportCard';
 import { DashboardSkeleton } from '../components/DashboardSkeleton';
+import { QuickActionModal } from '../components/QuickActionModal';
+import { CustomerDashboard } from '../components/CustomerDashboard';
+import { VendorDashboard } from '../components/VendorDashboard';
 
 type DashboardState =
   | { status: 'loading' }
@@ -28,6 +32,15 @@ type DashboardState =
   | { status: 'success'; data: DashboardData };
 
 export function DashboardPage() {
+  const { isContact, isVendorContact } = useAuth();
+
+  if (isContact) {
+    if (isVendorContact) {
+      return <VendorDashboard />;
+    }
+    return <CustomerDashboard />;
+  }
+
   const {
     getDashboardMetricsData,
     invoices,
@@ -39,6 +52,7 @@ export function DashboardPage() {
 
   const [state, setState] = useState<DashboardState>({ status: 'loading' });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeQuickAction, setActiveQuickAction] = useState<string | null>(null);
 
   const fetchDashboard = useCallback(async (isRefresh = false) => {
     try {
@@ -211,7 +225,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-dashboard space-y-6 p-4 lg:p-6">
+    <div className="mx-auto max-w-7xl w-full space-y-6 p-4 sm:p-6">
       {/* TOP: Header + Period + Refresh */}
       <DashboardHeader
         period={data.period}
@@ -223,8 +237,17 @@ export function DashboardPage() {
       {/* Alerts */}
       <FinancialAlerts alerts={data.alerts} />
 
-      {/* Quick Actions */}
-      <QuickActions actions={data.quickActions} />
+      {/* Quick Actions with Inline Modal Support */}
+      <QuickActions
+        actions={data.quickActions}
+        onAction={(actionId) => setActiveQuickAction(actionId)}
+      />
+
+      {/* Quick Action Modal (Inline dialog with close cross [X] button) */}
+      <QuickActionModal
+        actionId={activeQuickAction}
+        onClose={() => setActiveQuickAction(null)}
+      />
 
       {/* FIRST ROW: Financial KPI Cards */}
       <FinancialSummary metrics={mergedMetrics} />

@@ -20,10 +20,10 @@ export function ReceivablesCard({ data }: ReceivablesCardProps) {
         <CardTitle>Receivables</CardTitle>
       </CardHeader>
 
-      <CardContent className="flex-1 space-y-4">
+      <CardContent className="flex-1 space-y-3.5">
         {/* Total outstanding */}
         <div>
-          <p className="text-caption text-navy-400">Outstanding</p>
+          <p className="text-caption text-navy-400">Outstanding Receivables</p>
           <p className="text-heading font-bold text-navy-900 tabular-nums">
             {formatCurrency(data.totalOutstanding)}
           </p>
@@ -36,7 +36,7 @@ export function ReceivablesCard({ data }: ReceivablesCardProps) {
             hasOverdue ? 'bg-status-danger-bg' : 'bg-status-success-bg'
           )}
         >
-          {hasOverdue && <AlertTriangle size={14} className="text-status-danger" />}
+          {hasOverdue && <AlertTriangle size={14} className="text-status-danger shrink-0" />}
           <div>
             <p
               className={cn(
@@ -54,10 +54,39 @@ export function ReceivablesCard({ data }: ReceivablesCardProps) {
           </div>
         </div>
 
-        {/* Invoice count */}
-        <div className="flex items-center gap-2 text-body text-navy-500">
-          <FileText size={14} className="text-navy-300" />
-          <span>{data.openInvoices} Open Invoices</span>
+        {/* Aging Breakdown Bar */}
+        <div className="space-y-1.5 pt-1">
+          <div className="flex items-center justify-between text-xs text-navy-600">
+            <span className="flex items-center gap-1.5 font-medium">
+              <FileText size={13} className="text-navy-400" />
+              <span>{data.openInvoices} Open Invoices</span>
+            </span>
+            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+              {hasOverdue ? 'Collection Due' : 'Healthy Flow'}
+            </span>
+          </div>
+          <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="bg-emerald-500"
+              style={{
+                width: `${data.totalOutstanding > 0 ? Math.max(10, Math.min(90, Math.round(((data.totalOutstanding - data.overdueAmount) / data.totalOutstanding) * 100))) : 100}%`,
+              }}
+              title="Within Terms"
+            />
+            {hasOverdue && (
+              <div
+                className="bg-red-500"
+                style={{
+                  width: `${data.totalOutstanding > 0 ? Math.max(10, Math.min(90, Math.round((data.overdueAmount / data.totalOutstanding) * 100))) : 0}%`,
+                }}
+                title="Overdue"
+              />
+            )}
+          </div>
+          <div className="flex justify-between text-[10px] text-navy-400">
+            <span>Terms: {formatCurrency(Math.max(0, data.totalOutstanding - data.overdueAmount))}</span>
+            <span>Overdue: {formatCurrency(data.overdueAmount)}</span>
+          </div>
         </div>
       </CardContent>
 

@@ -54,6 +54,7 @@ export function ProductsPage() {
   const [category, setCategory] = useState('Chairs & Seating');
   const [stock, setStock] = useState<number>(20);
   const [image, setImage] = useState(PRESET_PRODUCT_IMAGES[0]);
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (location.pathname === ROUTES.PRODUCTS_NEW) {
@@ -130,7 +131,7 @@ export function ProductsPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-surface-secondary">
+    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto bg-surface-secondary">
       {/* Odoo Control Panel */}
       <OdooControlPanel
         title="Products"
@@ -158,7 +159,7 @@ export function ProductsPage() {
       />
 
       {/* Main Content */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 max-w-7xl w-full mx-auto">
+      <div className="flex-1 px-4 sm:px-6 pt-4 pb-8 space-y-4 w-full max-w-7xl mx-auto">
         {notice && (
           <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-2xs">
             <div className="flex items-center gap-2">
@@ -191,15 +192,17 @@ export function ProductsPage() {
                   >
                     {/* Product Image Banner */}
                     <div className="relative h-36 bg-slate-100 overflow-hidden">
-                      {p.image ? (
+                      {p.image && !imageErrors[p.id] ? (
                         <img
                           src={p.image}
-                          alt={p.name}
+                          alt=""
+                          onError={() => setImageErrors((prev) => ({ ...prev, [p.id]: true }))}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-text-muted">
-                          <Package size={36} className="opacity-40" />
+                        <div className="w-full h-full flex flex-col items-center justify-center text-text-muted bg-slate-50">
+                          <Package size={32} className="opacity-30 text-navy-400" />
+                          <span className="text-[10px] text-text-muted mt-1 font-medium">{p.category}</span>
                         </div>
                       )}
                       <div className="absolute top-2 left-2 flex items-center gap-1.5">
@@ -295,14 +298,15 @@ export function ProductsPage() {
                         className="cursor-pointer hover:bg-slate-50 transition-colors"
                       >
                         <TableCell className="text-center py-2">
-                          {p.image ? (
+                          {p.image && !imageErrors[p.id] ? (
                             <img
                               src={p.image}
-                              alt={p.name}
+                              alt=""
+                              onError={() => setImageErrors((prev) => ({ ...prev, [p.id]: true }))}
                               className="w-8 h-8 rounded object-cover mx-auto border border-surface-border"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
+                            <div className="w-8 h-8 rounded bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                               <Package size={14} />
                             </div>
                           )}
@@ -476,7 +480,7 @@ export function ProductsPage() {
                 <Button type="button" variant="outline" size="sm" onClick={closeModal}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-navy-900 hover:bg-navy-800 text-white cursor-pointer">
+                <Button type="submit" size="sm" className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white cursor-pointer">
                   Save Product
                 </Button>
               </div>
@@ -493,14 +497,15 @@ export function ProductsPage() {
           <div className="w-full max-w-lg rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between border-b border-surface-border pb-3">
               <div className="flex items-center gap-3">
-                {selectedProduct.image ? (
+                {selectedProduct.image && !imageErrors[selectedProduct.id] ? (
                   <img
                     src={selectedProduct.image}
-                    alt={selectedProduct.name}
+                    alt=""
+                    onError={() => setImageErrors((prev) => ({ ...prev, [selectedProduct.id]: true }))}
                     className="w-14 h-14 rounded-lg object-cover border border-surface-border shadow-xs"
                   />
                 ) : (
-                  <div className="w-14 h-14 rounded-lg bg-navy-100 text-navy-900 flex items-center justify-center">
+                  <div className="w-14 h-14 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center">
                     <Package size={24} />
                   </div>
                 )}

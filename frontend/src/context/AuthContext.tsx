@@ -14,6 +14,8 @@ interface AuthContextType {
   isAdmin: boolean;
   isAccountant: boolean;
   isContact: boolean;
+  isVendorContact: boolean;
+  isCustomerContact: boolean;
 }
 
 const STORAGE_USER_KEY = 'urban_ledger_user';
@@ -22,45 +24,45 @@ const STORAGE_TOKEN_KEY = 'urban_ledger_token';
 // Demo seed accounts for immediate review & hackathon demonstration
 export const DEMO_ACCOUNTS: Record<string, { email: string; name: string; role: UserRole; contactType?: ContactType }> = {
   ADMIN: {
-    email: 'admin@urbanledger.com',
-    name: 'Rohith (Admin)',
+    email: 'admin@gmail.com',
+    name: 'Admin',
     role: 'ADMIN',
   },
   ADMIN_ALT: {
-    email: 'admin@urbanfurniture.com',
+    email: 'admin@urbanledger.com',
     name: 'Rohith Admin',
     role: 'ADMIN',
   },
   ACCOUNTANT: {
-    email: 'accountant@urbanledger.com',
-    name: 'Mohith (Lead Accountant)',
+    email: 'accountant@gmail.com',
+    name: 'Mohith Accountant',
     role: 'ACCOUNTANT',
   },
   ACCOUNTANT_ALT: {
-    email: 'accountant@urbanfurniture.com',
+    email: 'accountant@urbanledger.com',
     name: 'Mohith Accountant',
     role: 'ACCOUNTANT',
   },
   CUSTOMER: {
-    email: 'nimesh@gmail.com',
-    name: 'Nimesh Pathak (Customer)',
+    email: 'rohith@gmail.com',
+    name: 'Rohith',
     role: 'CONTACT',
     contactType: 'CUSTOMER',
   },
   CUSTOMER_ALT: {
-    email: 'nimesh@pathak.com',
+    email: 'nimesh@gmail.com',
     name: 'Nimesh Pathak',
     role: 'CONTACT',
     contactType: 'CUSTOMER',
   },
   VENDOR: {
-    email: 'azure@furniture.com',
-    name: 'Azure Furniture (Vendor)',
+    email: 'mohit@gmail.com',
+    name: 'Mohit Timber & Hardware',
     role: 'CONTACT',
     contactType: 'VENDOR',
   },
   VENDOR_ALT: {
-    email: 'orders@azurefurniture.com',
+    email: 'azure@furniture.com',
     name: 'Azure Furniture',
     role: 'CONTACT',
     contactType: 'VENDOR',
@@ -159,7 +161,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (matchedDemoKey) {
       // Verify valid demo password
-      const validPasswords = ['Password@123', 'Admin@12345', 'Accountant@12345', 'Contact@12345'];
+      const validPasswords = [
+        'admin@123',
+        'accountant@123',
+        'rohith@123',
+        'mohit@123',
+        'Password@123',
+        'Admin@12345',
+        'Accountant@12345',
+        'Contact@12345',
+      ];
       if (!validPasswords.includes(credentials.password)) {
         setIsLoading(false);
         throw new Error('Invalid email or password.');
@@ -196,8 +207,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: data.fullName,
           fullName: data.fullName,
           email: normalizedEmail,
+          mobile: data.mobileNumber,
           mobileNumber: data.mobileNumber,
           password: data.password,
           confirmPassword: data.confirmPassword,
@@ -215,12 +228,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           role: 'CONTACT',
           contactType: 'CUSTOMER',
           isActive: true,
+          contact: result.data.user.contact || null,
         };
         saveSession(apiUser, result.data.token);
         setIsLoading(false);
         return apiUser;
       } else {
-        backendError = result?.message || result?.error?.message || `Registration failed (${response.status})`;
+        let detailedMsg = result?.message || result?.error?.message;
+        if (result?.error?.details && Array.isArray(result.error.details) && result.error.details.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          detailedMsg = result.error.details.map((d: any) => d.message).join('. ');
+        }
+        backendError = detailedMsg || `Registration failed (${response.status})`;
       }
     } catch {
       backendReached = false;
@@ -248,15 +267,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginAsDemo = useCallback(async (roleType: 'ADMIN' | 'ACCOUNTANT' | 'CUSTOMER' | 'VENDOR'): Promise<AuthUser> => {
     const demo = DEMO_ACCOUNTS[roleType];
+    const passwordMap: Record<string, string> = {
+      ADMIN: 'admin@123',
+      ACCOUNTANT: 'accountant@123',
+      CUSTOMER: 'rohith@123',
+      VENDOR: 'mohit@123',
+    };
     return login({
       email: demo.email,
-      password: 'Password@123',
+      password: passwordMap[roleType] || 'Password@123',
     });
   }, [login]);
 
   const isAdmin = user?.role === 'ADMIN';
   const isAccountant = user?.role === 'ACCOUNTANT';
   const isContact = user?.role === 'CONTACT';
+  const isVendorContact = isContact && (user?.contactType === 'VENDOR' || user?.contactType === 'BOTH');
+  const isCustomerContact = isContact && (user?.contactType === 'CUSTOMER' || user?.contactType === 'BOTH');
 
   return (
     <AuthContext.Provider
@@ -272,6 +299,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isAdmin,
         isAccountant,
         isContact,
+        isVendorContact,
+        isCustomerContact,
       }}
     >
       {children}
