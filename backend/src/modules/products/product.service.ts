@@ -97,7 +97,14 @@ export class ProductService {
   public async getProductById(id: string): Promise<ProductRecord> {
     if (isDatabaseAvailable()) {
       try {
-        const product = await prisma.product.findUnique({ where: { id } });
+        const product = await prisma.product.findFirst({
+          where: {
+            OR: [
+              { id },
+              { name: { equals: id, mode: 'insensitive' } },
+            ],
+          },
+        });
         if (product) {
           return {
             id: product.id,
@@ -116,7 +123,11 @@ export class ProductService {
       }
     }
 
-    const product = memoryProducts.get(id);
+    const product =
+      memoryProducts.get(id) ||
+      Array.from(memoryProducts.values()).find(
+        (p) => p.id === id || p.name.toLowerCase() === id.toLowerCase()
+      );
     if (!product) {
       throw new NotFoundError('Product not found');
     }

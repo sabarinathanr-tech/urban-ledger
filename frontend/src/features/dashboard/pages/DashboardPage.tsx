@@ -33,14 +33,6 @@ type DashboardState =
 
 export function DashboardPage() {
   const { isContact, isVendorContact } = useAuth();
-
-  if (isContact) {
-    if (isVendorContact) {
-      return <VendorDashboard />;
-    }
-    return <CustomerDashboard />;
-  }
-
   const {
     getDashboardMetricsData,
     getDynamicRevenueExpenseTrend,
@@ -55,6 +47,12 @@ export function DashboardPage() {
   const [state, setState] = useState<DashboardState>({ status: 'loading' });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeQuickAction, setActiveQuickAction] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string; label: string }>({
+    startDate: '2026-04-01',
+    endDate: '2027-03-31',
+    label: 'Current Financial Year',
+  });
 
   const fetchDashboard = useCallback(async (isRefresh = false) => {
     try {
@@ -64,7 +62,10 @@ export function DashboardPage() {
         setState({ status: 'loading' });
       }
 
-      const data = await getDashboardSummary();
+      const data = await getDashboardSummary({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      });
       setState({ status: 'success', data: { ...data, lastUpdated: new Date().toISOString() } });
     } catch {
       setState({
@@ -74,11 +75,18 @@ export function DashboardPage() {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  if (isContact) {
+    if (isVendorContact) {
+      return <VendorDashboard />;
+    }
+    return <CustomerDashboard />;
+  }
 
   // Loading state
   if (state.status === 'loading') {
@@ -156,36 +164,51 @@ export function DashboardPage() {
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
 
   const mergedMetrics = data.metrics.map((m) => {
+    // If backend returns real database amount, use it; otherwise fallback to live calculated context metrics
+    const val = m.amount > 0 ? m.amount : (
+      m.id === 'revenue' ? liveMetrics.revenue :
+      m.id === 'expenses' ? liveMetrics.expenses :
+      m.id === 'net-profit' ? liveMetrics.netProfit :
+      m.id === 'cash-bank' ? liveMetrics.cashBank :
+      m.id === 'receivables' ? liveMetrics.receivables :
+      m.id === 'payables' ? liveMetrics.payables : m.amount
+    );
+
     switch (m.id) {
       case 'revenue':
-        return { ...m, amount: liveMetrics.revenue, href: ROUTES.REPORT_PROFIT_LOSS };
+        return { ...m, amount: val, href: ROUTES.REPORT_PROFIT_LOSS };
       case 'expenses':
-        return { ...m, amount: liveMetrics.expenses, href: ROUTES.BILLS };
+        return { ...m, amount: val, href: ROUTES.BILLS };
       case 'net-profit':
-        return { ...m, amount: liveMetrics.netProfit, href: ROUTES.REPORT_PROFIT_LOSS };
+        return { ...m, amount: val, href: ROUTES.REPORT_PROFIT_LOSS };
       case 'cash-bank':
-        return { ...m, amount: liveMetrics.cashBank, href: ROUTES.ACCOUNTING };
+        return { ...m, amount: val, href: ROUTES.ACCOUNTING };
       case 'receivables':
-        return { ...m, amount: liveMetrics.receivables, href: ROUTES.INVOICES };
+        return { ...m, amount: val, href: ROUTES.INVOICES };
       case 'payables':
-        return { ...m, amount: liveMetrics.payables, href: ROUTES.BILLS };
+        return { ...m, amount: val, href: ROUTES.BILLS };
       default:
         return m;
     }
   });
 
+  // Dynamically derive alerts from live invoices and budgets
+  const overdueInvoices = invoices.filter((i) => i.status === 'OVERDUE' || (i.balanceDue > 0 && i.dueDate && new Date().getTime() > new Date(i.dueDate).getTime()));
+  const overdueTotal = overdueInvoices.reduce((s, i) => s + (Number(i.balanceDue) || 0), 0);
+  const warnedBudget = budgets.find((b) => b.status === 'WARNING' || b.utilization >= 80);
+
   const mergedReceivables = {
     ...data.receivables,
-    totalOutstanding: liveMetrics.receivables,
-    openInvoices: liveMetrics.unpaidInvoicesCount,
-    overdueAmount: Math.round(liveMetrics.receivables * 0.25),
+    totalOutstanding: data.receivables.totalOutstanding || liveMetrics.receivables,
+    openInvoices: data.receivables.openInvoices || liveMetrics.unpaidInvoicesCount,
+    overdueAmount: data.receivables.overdueAmount !== undefined ? data.receivables.overdueAmount : overdueTotal,
   };
 
   const mergedPayables = {
     ...data.payables,
-    totalOutstanding: liveMetrics.payables,
-    openBills: liveMetrics.unpaidBillsCount,
-    overdueAmount: Math.round(liveMetrics.payables * 0.15),
+    totalOutstanding: data.payables.totalOutstanding || liveMetrics.payables,
+    openBills: data.payables.openBills || liveMetrics.unpaidBillsCount,
+    overdueAmount: data.payables.overdueAmount !== undefined ? data.payables.overdueAmount : 0,
   };
 
   const mergedBudgets: BudgetHealthItem[] = budgets.map((b) => ({
@@ -198,7 +221,6 @@ export function DashboardPage() {
     status: (b.status === 'HEALTHY' ? 'on-track' : b.status === 'WARNING' ? 'warning' : 'over-budget') as BudgetStatus,
   }));
 
-  const [chartPeriod, setChartPeriod] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
   const dynamicTrend = getDynamicRevenueExpenseTrend(chartPeriod);
 
   const dynamicAccountingHealth: AccountingHealthCheck[] = [
@@ -223,11 +245,6 @@ export function DashboardPage() {
       status: liveMetrics.cashBank > 0 ? 'healthy' : 'warning',
     },
   ];
-
-  // Dynamically derive alerts from live invoices and budgets
-  const overdueInvoices = invoices.filter((i) => i.status === 'OVERDUE' || (i.balanceDue > 0 && new Date() > new Date(i.dueDate)));
-  const overdueTotal = overdueInvoices.reduce((s, i) => s + (Number(i.balanceDue) || 0), 0);
-  const warnedBudget = budgets.find((b) => b.status === 'WARNING' || b.utilization >= 80);
 
   const dynamicAlerts: FinancialAlertData[] = [];
   if (overdueInvoices.length > 0) {
@@ -281,12 +298,14 @@ export function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl w-full space-y-6 p-4 sm:p-6">
-      {/* TOP: Header + Period + Refresh */}
       <DashboardHeader
-        period={data.period}
+        period={data.period || dateRange}
         lastUpdated={data.lastUpdated}
         onRefresh={() => fetchDashboard(true)}
         isRefreshing={isRefreshing}
+        onPeriodSelect={(startDate, endDate, label) => {
+          setDateRange({ startDate, endDate, label });
+        }}
       />
 
       {/* Alerts */}

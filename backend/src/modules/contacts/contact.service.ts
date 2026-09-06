@@ -96,14 +96,29 @@ export class ContactService {
   public async getContactById(id: string): Promise<ContactRecord> {
     if (isDatabaseAvailable()) {
       try {
-        const contact = await prisma.contact.findUnique({ where: { id } });
+        const contact = await prisma.contact.findFirst({
+          where: {
+            OR: [
+              { id },
+              { name: { equals: id, mode: 'insensitive' } },
+              { email: { equals: id, mode: 'insensitive' } },
+            ],
+          },
+        });
         if (contact) return contact as unknown as ContactRecord;
       } catch {
         // fall through to memory
       }
     }
 
-    const contact = memoryContacts.get(id);
+    const contact =
+      memoryContacts.get(id) ||
+      Array.from(memoryContacts.values()).find(
+        (c) =>
+          c.id === id ||
+          c.name.toLowerCase() === id.toLowerCase() ||
+          (c.email && c.email.toLowerCase() === id.toLowerCase())
+      );
     if (!contact) {
       throw new NotFoundError('Contact not found');
     }

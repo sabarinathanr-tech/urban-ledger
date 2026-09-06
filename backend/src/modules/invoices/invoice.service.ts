@@ -314,7 +314,7 @@ export class InvoiceService {
     }
 
     const grandTotal = Number((subtotal + taxTotal).toFixed(2));
-    const invoiceNumber = `INV-2026-${String(invoiceCounter++).padStart(4, '0')}`;
+    const invoiceNumber = `INV-2026-${String(Date.now()).slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
     const id = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const issueDate = input.issueDate || new Date().toISOString().split('T')[0];
     const dueDate =
@@ -334,11 +334,19 @@ export class InvoiceService {
 
     if (isDatabaseAvailable()) {
       try {
+        let validSalesOrderId: string | undefined = undefined;
+        if (input.salesOrderId) {
+          const dbSO = await prisma.salesOrder.findFirst({
+            where: { OR: [{ id: input.salesOrderId }, { reference: { equals: input.salesOrderId, mode: 'insensitive' } }] },
+          });
+          if (dbSO) validSalesOrderId = dbSO.id;
+        }
+
         const createdInv = await prisma.invoice.create({
           data: {
             reference: invoiceNumber,
             customerId: customer.id,
-            salesOrderId: input.salesOrderId || undefined,
+            salesOrderId: validSalesOrderId,
             journalEntryId: entry.id,
             invoiceDate: new Date(issueDate),
             dueDate: new Date(dueDate),

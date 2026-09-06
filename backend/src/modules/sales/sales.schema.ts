@@ -9,6 +9,7 @@ export const salesOrderLineInputSchema = z.object({
 export const createSalesOrderSchema = z.object({
   customerId: z.string().min(1, 'Customer is required'),
   orderDate: z.string().optional(),
+  status: z.enum(['DRAFT', 'CONFIRMED', 'INVOICED', 'CANCELLED']).optional(),
   lines: z.array(salesOrderLineInputSchema).min(1, 'At least 1 product line is required'),
 });
 

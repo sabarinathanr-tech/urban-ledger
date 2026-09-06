@@ -1,12 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
 import { dashboardService } from './dashboard.service.js';
 import { sendSuccess } from '../../utils/response.js';
-import type { RevenueExpenseQuery, RecentTransactionsQuery } from './dashboard.schema.js';
+import type { DashboardSummaryQuery, RevenueExpenseQuery, RecentTransactionsQuery } from './dashboard.schema.js';
 
 export class DashboardController {
   public async getSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const data = await dashboardService.getSummary();
+      const data = await dashboardService.getSummary(req.query as unknown as DashboardSummaryQuery);
       sendSuccess(res, 'Dashboard summary retrieved successfully', data, 200);
     } catch (error) {
       next(error);

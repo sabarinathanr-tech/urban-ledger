@@ -207,9 +207,11 @@ export class SalesService {
     }
 
     const grandTotal = Number((subtotal + taxTotal).toFixed(2));
-    const orderNumber = `SO-2026-${String(orderCounter++).padStart(4, '0')}`;
+    const orderNumber = `SO-2026-${String(Date.now()).slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
     const id = `so_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const orderDate = input.orderDate || new Date().toISOString().split('T')[0];
+
+    const orderStatus = input.status || 'DRAFT';
 
     if (isDatabaseAvailable()) {
       try {
@@ -218,7 +220,7 @@ export class SalesService {
             reference: orderNumber,
             customerId: customer.id,
             orderDate: new Date(orderDate),
-            status: 'CONFIRMED',
+            status: orderStatus as any,
             subtotal: new Prisma.Decimal(subtotal),
             taxAmount: new Prisma.Decimal(taxTotal),
             totalAmount: new Prisma.Decimal(grandTotal),
@@ -250,7 +252,7 @@ export class SalesService {
       customerId: customer.id,
       customerName: customer.name,
       orderDate,
-      status: 'CONFIRMED',
+      status: orderStatus as any,
       lines,
       subtotal: Number(subtotal.toFixed(2)),
       taxTotal: Number(taxTotal.toFixed(2)),

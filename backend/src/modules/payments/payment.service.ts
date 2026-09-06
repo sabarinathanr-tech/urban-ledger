@@ -228,7 +228,7 @@ export class PaymentService {
       referenceDoc = bill.billNumber;
     }
 
-    const paymentNumber = `PAY-2026-${String(paymentCounter++).padStart(4, '0')}`;
+    const paymentNumber = `PAY-2026-${String(Date.now()).slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
     const id = `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const paymentDate = input.paymentDate || new Date().toISOString().split('T')[0];
 

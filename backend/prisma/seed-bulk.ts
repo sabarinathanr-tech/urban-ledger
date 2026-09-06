@@ -673,6 +673,7 @@ async function main() {
 
       if (isPaid) {
         const isCash = j % 3 === 0;
+        const payDate = new Date(billDate.getTime() + 3 * 86400000);
         const payMethod = isCash ? 'CASH' : 'BANK';
         const payJournalId = isCash ? cashJournalId : bankJournalId;
         const payAccountId = isCash ? cashAccountId : bankAccountId;

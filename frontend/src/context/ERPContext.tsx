@@ -681,12 +681,13 @@ export function ERPProvider({ children }: { children: ReactNode }) {
   }, [refreshFromBackend]);
   const createSalesOrder = useCallback((order: Omit<SalesOrder, 'id' | 'orderNumber'> & { status?: SalesOrder['status'] }): SalesOrder => {
     const id = `so-${Date.now()}`;
-    const orderNumber = `S${String(salesOrders.length + 1).padStart(5, '0')}`;
+    const orderNumber = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
+    const orderStatus = order.status || 'DRAFT';
     const newSO: SalesOrder = {
       ...order,
       id,
       orderNumber,
-      status: order.status || 'CONFIRMED',
+      status: orderStatus,
     };
     setSalesOrders((prev) => [newSO, ...prev]);
 
@@ -694,11 +695,19 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     apiClient.post('/sales', {
       customerId: order.customerId,
       orderDate: order.orderDate,
+      status: orderStatus,
       lines: order.lines.map((l) => ({
         productId: l.productId,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
       })),
+    }).then((res) => {
+      const backendOrder = res.data?.data;
+      if (backendOrder?.id) {
+        setSalesOrders((prev) =>
+          prev.map((so) => (so.id === id ? { ...so, id: backendOrder.id, orderNumber: backendOrder.orderNumber } : so))
+        );
+      }
     }).catch((e) => console.warn('Backend SO sync error:', e)).finally(() => {
       setTimeout(refreshFromBackend, 300);
     });
@@ -822,9 +831,28 @@ export function ERPProvider({ children }: { children: ReactNode }) {
     setJournalEntries((prev) => [newJE, ...prev]);
     setInvoices((prev) => [newInvoice, ...prev]);
 
-    apiClient.post(`/sales/${orderId}/invoice`).catch((e) => console.warn('Invoice SO sync error:', e)).finally(() => {
-      setTimeout(refreshFromBackend, 300);
-    });
+    apiClient
+      .post(`/sales/${orderId}/invoice`)
+      .then((res) => {
+        const backendInv = res.data?.data?.invoice;
+        if (backendInv?.id) {
+          setInvoices((prev) =>
+            prev.map((inv) =>
+              inv.id === invId
+                ? {
+                    ...inv,
+                    id: backendInv.id,
+                    invoiceNumber: backendInv.invoiceNumber || backendInv.reference || inv.invoiceNumber,
+                  }
+                : inv
+            )
+          );
+        }
+      })
+      .catch((e) => console.warn('Invoice SO sync error:', e))
+      .finally(() => {
+        setTimeout(refreshFromBackend, 300);
+      });
 
     return newInvoice;
   }, [salesOrders, invoices.length, journalEntries.length, refreshFromBackend]);
@@ -2223,7 +2251,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       .reduce((sum, i) => sum + (Number(i.grandTotal) || 0), 0);
     const revenueAccounts = accounts.filter((a) => a.type === 'INCOME');
     const revenueFromAccounts = revenueAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const revenue = liveRevenueFromInvoices > 0 ? liveRevenueFromInvoices : (revenueFromAccounts > 0 ? revenueFromAccounts : 3250000);
+    const revenue = liveRevenueFromInvoices || revenueFromAccounts || 0;
 
     const liveExpensesFromBills = bills
       .filter((b) => b.status !== 'CANCELLED')
@@ -2232,16 +2260,16 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       (a) => a.type === 'EXPENSE' || a.type === 'OTHER_EXPENSE'
     );
     const expensesFromAccounts = expenseAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const expenses = liveExpensesFromBills > 0 ? liveExpensesFromBills : (expensesFromAccounts > 0 ? expensesFromAccounts : 1850000);
+    const expenses = liveExpensesFromBills || expensesFromAccounts || 0;
 
     const netProfit = revenue - expenses;
 
-    // Liquid Cash & Bank:
+    // Liquid Cash & Bank from General Ledger
     const bankAcc = accounts.find((a) => a.id === 'acc-1002' || a.name.toLowerCase().includes('bank') || a.code === '1002' || a.code === '1010');
     const cashAcc = accounts.find((a) => a.id === 'acc-1001' || a.name.toLowerCase().includes('cash') || a.code === '1001' || a.code === '1000');
 
     const totalLiquid = (Number(bankAcc?.balance) || 0) + (Number(cashAcc?.balance) || 0);
-    const cashBank = totalLiquid > 0 ? totalLiquid : 3305000;
+    const cashBank = totalLiquid;
 
     // Live dynamic receivables from all customer invoices with pending balance
     const openInvoices = invoices.filter(
@@ -2259,8 +2287,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         a.name.toLowerCase().includes('receivable') ||
         a.name.toLowerCase().includes('debtor')
     );
-    const receivables =
-      invoicesReceivables > 0 ? invoicesReceivables : Number(recAcc?.balance || 342480);
+    const receivables = invoicesReceivables || Number(recAcc?.balance || 0);
 
     // Live dynamic payables from all vendor bills with pending balance
     const openBills = bills.filter(
@@ -2278,8 +2305,7 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         a.name.toLowerCase().includes('payable') ||
         a.name.toLowerCase().includes('creditor')
     );
-    const payables =
-      billsPayables > 0 ? billsPayables : Number(payAcc?.balance || 180000);
+    const payables = billsPayables || Number(payAcc?.balance || 0);
 
     return {
       revenue,
@@ -2307,8 +2333,8 @@ export function ERPProvider({ children }: { children: ReactNode }) {
           .reduce((sum, b) => sum + (Number(b.grandTotal) || 0), 0);
         return {
           month: yr,
-          revenue: rev > 0 ? rev : (yr === '2026' ? 8782622 : 6500000),
-          expenses: exp > 0 ? exp : (yr === '2026' ? 4742892 : 3800000),
+          revenue: rev,
+          expenses: exp,
         };
       });
     }
@@ -2336,13 +2362,13 @@ export function ERPProvider({ children }: { children: ReactNode }) {
         });
         return {
           month: q.label,
-          revenue: rev > 0 ? rev : 2100000,
-          expenses: exp > 0 ? exp : 1200000,
+          revenue: rev,
+          expenses: exp,
         };
       });
     }
 
-    // Default: Monthly view showing the 6 standard operating months
+    // Default: Monthly view showing the standard operating months
     const monthDefs = [
       { key: '2026-01', label: 'Jan' },
       { key: '2026-02', label: 'Feb' },
@@ -2363,7 +2389,6 @@ export function ERPProvider({ children }: { children: ReactNode }) {
       if (monthlyMap[ym]) {
         monthlyMap[ym].revenue += Number(inv.grandTotal) || 0;
       } else {
-        // distribute to Sep if current
         monthlyMap['2026-09'].revenue += Number(inv.grandTotal) || 0;
       }
     });
@@ -2380,8 +2405,8 @@ export function ERPProvider({ children }: { children: ReactNode }) {
 
     return monthDefs.map((m) => ({
       month: m.label,
-      revenue: monthlyMap[m.key].revenue > 0 ? monthlyMap[m.key].revenue : 650000,
-      expenses: monthlyMap[m.key].expenses > 0 ? monthlyMap[m.key].expenses : 420000,
+      revenue: monthlyMap[m.key].revenue,
+      expenses: monthlyMap[m.key].expenses,
     }));
   }, [invoices, bills]);
 
