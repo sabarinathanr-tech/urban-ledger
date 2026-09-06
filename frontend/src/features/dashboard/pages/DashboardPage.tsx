@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/app/config';
 import { useERP } from '@/context/ERPContext';
 import { useAuth } from '@/context/AuthContext';
-import type { DashboardData, RecentTransaction, BudgetHealthItem, BudgetStatus, TransactionStatus, AccountingHealthCheck } from '../types';
+import type { DashboardData, RecentTransaction, BudgetHealthItem, BudgetStatus, TransactionStatus, AccountingHealthCheck, FinancialAlertData } from '../types';
 import { getDashboardSummary } from '../api';
 
 
@@ -198,7 +198,8 @@ export function DashboardPage() {
     status: (b.status === 'HEALTHY' ? 'on-track' : b.status === 'WARNING' ? 'warning' : 'over-budget') as BudgetStatus,
   }));
 
-  const dynamicTrend = getDynamicRevenueExpenseTrend();
+  const [chartPeriod, setChartPeriod] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const dynamicTrend = getDynamicRevenueExpenseTrend(chartPeriod);
 
   const dynamicAccountingHealth: AccountingHealthCheck[] = [
     {
@@ -222,6 +223,31 @@ export function DashboardPage() {
       status: liveMetrics.cashBank > 0 ? 'healthy' : 'warning',
     },
   ];
+
+  // Dynamically derive alerts from live invoices and budgets
+  const overdueInvoices = invoices.filter((i) => i.status === 'OVERDUE' || (i.balanceDue > 0 && new Date() > new Date(i.dueDate)));
+  const overdueTotal = overdueInvoices.reduce((s, i) => s + (Number(i.balanceDue) || 0), 0);
+  const warnedBudget = budgets.find((b) => b.status === 'WARNING' || b.utilization >= 80);
+
+  const dynamicAlerts: FinancialAlertData[] = [];
+  if (overdueInvoices.length > 0) {
+    dynamicAlerts.push({
+      id: 'dynamic-alert-overdue',
+      severity: 'warning',
+      message: `${overdueInvoices.length} customer invoice${overdueInvoices.length > 1 ? 's are' : ' is'} past due totalling ₹${overdueTotal.toLocaleString('en-IN')}.`,
+      actionLabel: 'View Overdue',
+      actionHref: ROUTES.INVOICES,
+    });
+  }
+  if (warnedBudget) {
+    dynamicAlerts.push({
+      id: `dynamic-alert-budget-${warnedBudget.id}`,
+      severity: 'warning',
+      message: `${warnedBudget.name} budget is at ${warnedBudget.utilization}% utilization.`,
+      actionLabel: 'View Budget',
+      actionHref: ROUTES.BUDGETS,
+    });
+  }
 
   // Empty state check — no transactions and all metrics zero
   const hasTransactions = liveRecentTxns.length > 0;
@@ -264,7 +290,7 @@ export function DashboardPage() {
       />
 
       {/* Alerts */}
-      <FinancialAlerts alerts={data.alerts} />
+      <FinancialAlerts alerts={dynamicAlerts.length > 0 ? dynamicAlerts : data.alerts} />
 
       {/* Quick Actions with Inline Modal Support */}
       <QuickActions
@@ -282,7 +308,11 @@ export function DashboardPage() {
       <FinancialSummary metrics={mergedMetrics} />
 
       {/* SECOND ROW: Revenue vs Expense Chart */}
-      <RevenueExpenseChart data={dynamicTrend.length > 0 ? dynamicTrend : data.revenueExpenseTrend} />
+      <RevenueExpenseChart
+        data={dynamicTrend.length > 0 ? dynamicTrend : data.revenueExpenseTrend}
+        activePeriod={chartPeriod}
+        onPeriodChange={(p) => setChartPeriod(p)}
+      />
 
       {/* THIRD ROW: Budget Health + Receivables + Payables */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

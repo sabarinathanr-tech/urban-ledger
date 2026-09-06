@@ -16,6 +16,8 @@ import { formatCurrency } from '../utils';
 
 interface RevenueExpenseChartProps {
   data: RevenueExpenseDataPoint[];
+  onPeriodChange?: (period: ChartPeriod) => void;
+  activePeriod?: ChartPeriod;
 }
 
 const PERIOD_OPTIONS: { value: ChartPeriod; label: string }[] = [
@@ -50,8 +52,18 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
-export function RevenueExpenseChart({ data }: RevenueExpenseChartProps) {
-  const [activePeriod, setActivePeriod] = useState<ChartPeriod>('monthly');
+export function RevenueExpenseChart({
+  data,
+  onPeriodChange,
+  activePeriod: controlledPeriod,
+}: RevenueExpenseChartProps) {
+  const [internalPeriod, setInternalPeriod] = useState<ChartPeriod>('monthly');
+  const currentPeriod = controlledPeriod ?? internalPeriod;
+
+  const handleSelectPeriod = (period: ChartPeriod) => {
+    setInternalPeriod(period);
+    onPeriodChange?.(period);
+  };
 
   return (
     <Card>
@@ -68,11 +80,11 @@ export function RevenueExpenseChart({ data }: RevenueExpenseChartProps) {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setActivePeriod(option.value)}
+                onClick={() => handleSelectPeriod(option.value)}
                 className={cn(
-                  'rounded px-3 py-1 text-caption font-medium transition-colors',
-                  activePeriod === option.value
-                    ? 'bg-white text-navy-700 shadow-sm'
+                  'rounded px-3 py-1 text-caption font-medium transition-colors cursor-pointer',
+                  currentPeriod === option.value
+                    ? 'bg-white text-navy-700 shadow-sm font-semibold'
                     : 'text-navy-400 hover:text-navy-600'
                 )}
               >
