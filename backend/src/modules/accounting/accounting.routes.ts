@@ -13,6 +13,7 @@ router.use(requireAuth);
 router.use(requireRole(ROLES.ADMIN, ROLES.ACCOUNTANT));
 
 router.get('/chart-of-accounts', (req, res, next) => accountingController.getChartOfAccounts(req, res, next));
+router.put('/chart-of-accounts/:id', (req, res, next) => accountingController.updateAccount(req, res, next));
 router.get('/journals', (req, res, next) => accountingController.getJournals(req, res, next));
 router.get('/journal-entries', (req, res, next) => accountingController.getJournalEntries(req, res, next));
 router.post('/journal-entries', validateBody(journalEntrySchema), (req, res, next) =>

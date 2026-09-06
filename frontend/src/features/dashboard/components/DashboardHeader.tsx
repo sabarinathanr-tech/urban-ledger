@@ -1,6 +1,8 @@
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { RefreshCw, Calendar } from 'lucide-react';
+import { RefreshCw, Calendar, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ROUTES } from '@/app/config';
 import type { DashboardPeriod } from '../types';
 import { formatDateRange, formatRelativeTime } from '../utils';
 
@@ -38,6 +40,19 @@ export function DashboardHeader({
             <Calendar size={14} className="text-navy-400" />
             <span>{formatDateRange(period.startDate, period.endDate)}</span>
           </div>
+
+          {/* Edit Balances & Chart of Accounts */}
+          <Link to={ROUTES.ACCOUNTING}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="cursor-pointer text-xs gap-1.5 text-navy-700 hover:text-brand-700 border-surface-border"
+              title="Edit account balances and chart of accounts"
+            >
+              <Pencil size={13} />
+              <span className="hidden sm:inline">Edit Balances</span>
+            </Button>
+          </Link>
 
           {/* Refresh */}
           <Button

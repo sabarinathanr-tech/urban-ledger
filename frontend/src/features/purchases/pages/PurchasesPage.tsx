@@ -39,6 +39,9 @@ export function PurchasesPage() {
     contacts,
     products,
     analyticAccounts,
+    addContact,
+    addProduct,
+    addAnalyticAccount,
     refreshERPData,
   } = useERP();
 
@@ -55,6 +58,14 @@ export function PurchasesPage() {
   const [quantity, setQuantity] = useState(10);
   const [selectedAnalyticId, setSelectedAnalyticId] = useState(analyticAccounts[0]?.id || '');
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Custom / Other Entry States
+  const [customVendorName, setCustomVendorName] = useState('');
+  const [customVendorCity, setCustomVendorCity] = useState('');
+  const [customProductName, setCustomProductName] = useState('');
+  const [customProductPrice, setCustomProductPrice] = useState(12000);
+  const [customProductCategory, setCustomProductCategory] = useState('Raw Materials');
+  const [customAnalyticName, setCustomAnalyticName] = useState('');
 
   useEffect(() => {
     if (!vendorId && (eligibleVendors[0]?.id || contacts[0]?.id)) {
@@ -108,11 +119,52 @@ export function PurchasesPage() {
 
   const handleCreatePO = (e: React.FormEvent) => {
     e.preventDefault();
-    const vendor = contacts.find((c) => c.id === vendorId);
-    const product = products.find((p) => p.id === productId);
+
+    let vendor = contacts.find((c) => c.id === vendorId);
+    if (vendorId === '__OTHER__') {
+      if (!customVendorName.trim()) return;
+      vendor = addContact({
+        name: customVendorName.trim(),
+        type: 'VENDOR',
+        email: `${customVendorName.trim().toLowerCase().replace(/\s+/g, '')}@supplier.com`,
+        mobile: '+91 98765 12345',
+        city: customVendorCity.trim() || 'Chennai',
+        state: 'Tamil Nadu',
+        pincode: '600001',
+      });
+    }
+
+    let product = products.find((p) => p.id === productId);
+    if (productId === '__OTHER__') {
+      if (!customProductName.trim()) return;
+      const purchP = Number(customProductPrice) || 3000;
+      product = addProduct({
+        name: customProductName.trim(),
+        salesPrice: Math.round(purchP * 1.5),
+        purchasePrice: purchP,
+        category: customProductCategory.trim() || 'Raw Materials',
+        type: 'GOODS',
+        stock: 50,
+      });
+    }
+
     if (!vendor || !product) return;
 
-    const chosenAnalytic = analyticAccounts.find((a) => a.id === selectedAnalyticId) || analyticAccounts[0];
+    let chosenAnalytic = analyticAccounts.find((a) => a.id === selectedAnalyticId);
+    if (selectedAnalyticId === '__OTHER__') {
+      if (customAnalyticName.trim()) {
+        chosenAnalytic = addAnalyticAccount({
+          name: customAnalyticName.trim(),
+          type: 'EXPENSES',
+          description: 'Custom expense budget created via purchase order',
+        });
+      } else {
+        chosenAnalytic = analyticAccounts[0];
+      }
+    } else if (!chosenAnalytic) {
+      chosenAnalytic = analyticAccounts[0];
+    }
+
     const subtotal = product.purchasePrice * quantity;
     const taxAmount = Math.round(subtotal * 0.18);
     const grandTotal = subtotal + taxAmount;
@@ -433,6 +485,7 @@ export function PurchasesPage() {
                   onChange={(e) => setVendorId(e.target.value)}
                   className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
                 >
+                  <option value="__OTHER__">➕ Other (Enter New Supplier Details...)</option>
                   {contacts
                     .filter((c) => c.type === 'VENDOR' || c.type === 'BOTH')
                     .map((c) => (
@@ -441,6 +494,31 @@ export function PurchasesPage() {
                       </option>
                     ))}
                 </select>
+                {vendorId === '__OTHER__' && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Supplier / Vendor Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Apex Wood & Timbers Ltd"
+                        value={customVendorName}
+                        onChange={(e) => setCustomVendorName(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">City</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Chennai"
+                        value={customVendorCity}
+                        onChange={(e) => setCustomVendorCity(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -450,12 +528,49 @@ export function PurchasesPage() {
                   onChange={(e) => setProductId(e.target.value)}
                   className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
                 >
+                  <option value="__OTHER__">➕ Other (Enter Custom Supply Item...)</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} — Cost: ₹{p.purchasePrice.toLocaleString('en-IN')}
                     </option>
                   ))}
                 </select>
+                {productId === '__OTHER__' && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Material / Item Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Polished Brass Handles & Fixtures"
+                        value={customProductName}
+                        onChange={(e) => setCustomProductName(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Unit Purchase Cost (₹) *</label>
+                      <input
+                        type="number"
+                        min={10}
+                        required
+                        value={customProductPrice}
+                        onChange={(e) => setCustomProductPrice(Number(e.target.value))}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs font-mono text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Category</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Hardware & Fittings"
+                        value={customProductCategory}
+                        onChange={(e) => setCustomProductCategory(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -465,12 +580,26 @@ export function PurchasesPage() {
                   onChange={(e) => setSelectedAnalyticId(e.target.value)}
                   className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
                 >
+                  <option value="__OTHER__">➕ Other (Enter Custom Expense Budget...)</option>
                   {analyticAccounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.code ? `${a.code} - ` : ''}{a.name} ({a.type})
                     </option>
                   ))}
                 </select>
+                {selectedAnalyticId === '__OTHER__' && (
+                  <div className="mt-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                    <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Expense Budget Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Specialized Metal Hardware Procurement"
+                      value={customAnalyticName}
+                      onChange={(e) => setCustomAnalyticName(e.target.value)}
+                      className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -487,9 +616,11 @@ export function PurchasesPage() {
 
               {/* Non-blocking Exceeds Approved Budget Warning */}
               {(() => {
-                const currentProd = products.find((p) => p.id === productId);
+                const activePrice = productId === '__OTHER__'
+                  ? (Number(customProductPrice) || 0)
+                  : (products.find((p) => p.id === productId)?.purchasePrice || 0);
                 const currentAcc = analyticAccounts.find((a) => a.id === selectedAnalyticId) || analyticAccounts[0];
-                const estTotal = Math.round(((currentProd?.purchasePrice || 0) * quantity) * 1.18);
+                const estTotal = Math.round((activePrice * quantity) * 1.18);
                 const accBal = currentAcc?.balance ?? 50000;
                 const exceeds = currentAcc && estTotal > accBal;
                 if (!exceeds) return null;
@@ -508,26 +639,30 @@ export function PurchasesPage() {
                 );
               })()}
 
-              <div className="rounded-lg bg-slate-50 p-3 border border-slate-200 text-xs space-y-1">
-                <div className="flex justify-between text-navy-600">
-                  <span>Subtotal</span>
-                  <span className="font-mono">
-                    ₹{((products.find((p) => p.id === productId)?.purchasePrice || 0) * quantity).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="flex justify-between text-navy-600">
-                  <span>Input GST (18%)</span>
-                  <span className="font-mono">
-                    ₹{Math.round(((products.find((p) => p.id === productId)?.purchasePrice || 0) * quantity) * 0.18).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="flex justify-between font-bold text-navy-900 pt-1 border-t border-slate-200">
-                  <span>Estimated Total</span>
-                  <span className="font-mono">
-                    ₹{Math.round(((products.find((p) => p.id === productId)?.purchasePrice || 0) * quantity) * 1.18).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const activePrice = productId === '__OTHER__'
+                  ? (Number(customProductPrice) || 0)
+                  : (products.find((p) => p.id === productId)?.purchasePrice || 0);
+                const calcSubtotal = activePrice * quantity;
+                const calcTax = Math.round(calcSubtotal * 0.18);
+                const calcTotal = calcSubtotal + calcTax;
+                return (
+                  <div className="rounded-lg bg-slate-50 p-3 border border-slate-200 text-xs space-y-1">
+                    <div className="flex justify-between text-navy-600">
+                      <span>Subtotal</span>
+                      <span className="font-mono">₹{calcSubtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-navy-600">
+                      <span>Input GST (18%)</span>
+                      <span className="font-mono">₹{calcTax.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-navy-900 pt-1 border-t border-slate-200">
+                      <span>Estimated Total</span>
+                      <span className="font-mono">₹{calcTotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button type="button" variant="outline" size="sm" onClick={closeModal}>

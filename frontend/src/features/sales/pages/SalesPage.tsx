@@ -38,6 +38,9 @@ export function SalesPage() {
     contacts,
     products,
     analyticAccounts,
+    addContact,
+    addProduct,
+    addAnalyticAccount,
     refreshERPData,
   } = useERP();
 
@@ -54,6 +57,14 @@ export function SalesPage() {
   const [quantity, setQuantity] = useState(2);
   const [selectedAnalyticId, setSelectedAnalyticId] = useState(analyticAccounts[0]?.id || '');
   const [orderNotice, setOrderNotice] = useState<string | null>(null);
+
+  // "Other" / Custom Entry States
+  const [customCustomerName, setCustomCustomerName] = useState('');
+  const [customCustomerCity, setCustomCustomerCity] = useState('');
+  const [customProductName, setCustomProductName] = useState('');
+  const [customProductPrice, setCustomProductPrice] = useState(15000);
+  const [customProductCategory, setCustomProductCategory] = useState('Custom Furniture');
+  const [customAnalyticName, setCustomAnalyticName] = useState('');
 
   useEffect(() => {
     if (!customerId && (eligibleCustomers[0]?.id || contacts[0]?.id)) {
@@ -112,12 +123,52 @@ export function SalesPage() {
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    const customer = contacts.find((c) => c.id === customerId);
-    const product = products.find((p) => p.id === productId);
+
+    let customer = contacts.find((c) => c.id === customerId);
+    if (customerId === '__OTHER__') {
+      if (!customCustomerName.trim()) return;
+      customer = addContact({
+        name: customCustomerName.trim(),
+        type: 'CUSTOMER',
+        email: `${customCustomerName.trim().toLowerCase().replace(/\s+/g, '')}@client.com`,
+        mobile: '+91 98765 43210',
+        city: customCustomerCity.trim() || 'Coimbatore',
+        state: 'Tamil Nadu',
+        pincode: '641001',
+      });
+    }
+
+    let product = products.find((p) => p.id === productId);
+    if (productId === '__OTHER__') {
+      if (!customProductName.trim()) return;
+      const salesP = Number(customProductPrice) || 5000;
+      product = addProduct({
+        name: customProductName.trim(),
+        salesPrice: salesP,
+        purchasePrice: Math.round(salesP * 0.65),
+        category: customProductCategory.trim() || 'Custom Orders',
+        type: 'GOODS',
+        stock: 25,
+      });
+    }
 
     if (!customer || !product) return;
 
-    const chosenAnalytic = analyticAccounts.find((a) => a.id === selectedAnalyticId) || analyticAccounts[0];
+    let chosenAnalytic = analyticAccounts.find((a) => a.id === selectedAnalyticId);
+    if (selectedAnalyticId === '__OTHER__') {
+      if (customAnalyticName.trim()) {
+        chosenAnalytic = addAnalyticAccount({
+          name: customAnalyticName.trim(),
+          type: 'INCOME',
+          description: 'Custom revenue stream created via sales order',
+        });
+      } else {
+        chosenAnalytic = analyticAccounts[0];
+      }
+    } else if (!chosenAnalytic) {
+      chosenAnalytic = analyticAccounts[0];
+    }
+
     const subtotal = product.salesPrice * quantity;
     const taxAmount = Math.round(subtotal * 0.18);
     const grandTotal = subtotal + taxAmount;
@@ -440,6 +491,7 @@ export function SalesPage() {
                   onChange={(e) => setCustomerId(e.target.value)}
                   className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
                 >
+                  <option value="__OTHER__">➕ Other (Enter New Customer Details...)</option>
                   {contacts
                     .filter((c) => c.type === 'CUSTOMER' || c.type === 'BOTH')
                     .map((c) => (
@@ -448,6 +500,31 @@ export function SalesPage() {
                       </option>
                     ))}
                 </select>
+                {customerId === '__OTHER__' && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Customer Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Apex Corporation Pvt Ltd"
+                        value={customCustomerName}
+                        onChange={(e) => setCustomCustomerName(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">City</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Coimbatore"
+                        value={customCustomerCity}
+                        onChange={(e) => setCustomCustomerCity(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -457,12 +534,49 @@ export function SalesPage() {
                   onChange={(e) => setProductId(e.target.value)}
                   className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
                 >
+                  <option value="__OTHER__">➕ Other (Enter Custom Product Details...)</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} — ₹{p.salesPrice.toLocaleString('en-IN')}
                     </option>
                   ))}
                 </select>
+                {productId === '__OTHER__' && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Product Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Ergonomic Walnut Standing Desk"
+                        value={customProductName}
+                        onChange={(e) => setCustomProductName(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Unit Price (₹) *</label>
+                      <input
+                        type="number"
+                        min={100}
+                        required
+                        value={customProductPrice}
+                        onChange={(e) => setCustomProductPrice(Number(e.target.value))}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs font-mono text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Category</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Desks & Workstations"
+                        value={customProductCategory}
+                        onChange={(e) => setCustomProductCategory(e.target.value)}
+                        className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -472,12 +586,39 @@ export function SalesPage() {
                   onChange={(e) => setSelectedAnalyticId(e.target.value)}
                   className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
                 >
-                  {analyticAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.code ? `${a.code} - ` : ''}{a.name} ({a.type})
-                    </option>
-                  ))}
+                  <option value="__OTHER__">➕ Other (Enter Custom Analytic Account...)</option>
+                  <optgroup label="Revenue & Income Analytics (Recommended for Sales)">
+                    {analyticAccounts
+                      .filter((a) => a.type === 'INCOME')
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="Other Project Analytics">
+                    {analyticAccounts
+                      .filter((a) => a.type !== 'INCOME')
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.type})
+                        </option>
+                      ))}
+                  </optgroup>
                 </select>
+                {selectedAnalyticId === '__OTHER__' && (
+                  <div className="mt-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                    <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Analytic Stream Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Commercial Studio Expansion"
+                      value={customAnalyticName}
+                      onChange={(e) => setCustomAnalyticName(e.target.value)}
+                      className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -492,26 +633,30 @@ export function SalesPage() {
                 />
               </div>
 
-              <div className="rounded-lg bg-slate-50 p-3 border border-slate-200 text-xs space-y-1">
-                <div className="flex justify-between text-navy-600">
-                  <span>Subtotal</span>
-                  <span className="font-mono">
-                    ₹{((products.find((p) => p.id === productId)?.salesPrice || 0) * quantity).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="flex justify-between text-navy-600">
-                  <span>Output GST (18%)</span>
-                  <span className="font-mono">
-                    ₹{Math.round(((products.find((p) => p.id === productId)?.salesPrice || 0) * quantity) * 0.18).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="flex justify-between font-bold text-navy-900 pt-1 border-t border-slate-200">
-                  <span>Estimated Total</span>
-                  <span className="font-mono">
-                    ₹{Math.round(((products.find((p) => p.id === productId)?.salesPrice || 0) * quantity) * 1.18).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const activePrice = productId === '__OTHER__'
+                  ? (Number(customProductPrice) || 0)
+                  : (products.find((p) => p.id === productId)?.salesPrice || 0);
+                const calcSubtotal = activePrice * quantity;
+                const calcTax = Math.round(calcSubtotal * 0.18);
+                const calcTotal = calcSubtotal + calcTax;
+                return (
+                  <div className="rounded-lg bg-slate-50 p-3 border border-slate-200 text-xs space-y-1">
+                    <div className="flex justify-between text-navy-600">
+                      <span>Subtotal</span>
+                      <span className="font-mono">₹{calcSubtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-navy-600">
+                      <span>Output GST (18%)</span>
+                      <span className="font-mono">₹{calcTax.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-navy-900 pt-1 border-t border-slate-200">
+                      <span>Estimated Total</span>
+                      <span className="font-mono">₹{calcTotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button type="button" variant="outline" size="sm" onClick={closeModal}>
@@ -626,7 +771,7 @@ export function SalesPage() {
               </div>
             </div>
 
-            {/* Line Items Table: Sr. No., Product, Budget Analytics, Qty, Unit Price, Total */}
+            {/* Line Items Table: Sr. No., Product, Budget Analytics, Qty, Unit Price, Subtotal */}
             <div>
               <span className="text-xs font-bold text-navy-900 uppercase tracking-wider block mb-2">
                 Order Line Items
@@ -640,26 +785,32 @@ export function SalesPage() {
                       <th className="p-3">Budget Analytics</th>
                       <th className="p-3 text-right">Qty</th>
                       <th className="p-3 text-right">Unit Price</th>
-                      <th className="p-3 text-right">Total</th>
+                      <th className="p-3 text-right">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {selectedOrder.lines.map((ln, idx) => (
-                      <tr key={ln.id} className="hover:bg-slate-50/60">
-                        <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
-                        <td className="p-3 font-semibold text-navy-900">{ln.productName}</td>
-                        <td className="p-3 text-xs text-navy-700">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-brand-50 text-brand-700 border border-brand-200/60">
-                            {ln.analyticAccountName || 'General Commercial Operations'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right font-mono font-medium">{ln.quantity}</td>
-                        <td className="p-3 text-right font-mono text-slate-700">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
-                        <td className="p-3 text-right font-mono font-bold text-navy-950">
-                          ₹{ln.total.toLocaleString('en-IN')}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedOrder.lines.map((ln, idx) => {
+                      const lineSubtotal = ln.subtotal || (ln.quantity * ln.unitPrice);
+                      const cleanAnalyticName = ln.analyticAccountName && !ln.analyticAccountName.includes('Expense')
+                        ? ln.analyticAccountName
+                        : 'Commercial Furniture Sales (Income)';
+                      return (
+                        <tr key={ln.id} className="hover:bg-slate-50/60">
+                          <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                          <td className="p-3 font-semibold text-navy-900">{ln.productName}</td>
+                          <td className="p-3 text-xs text-navy-700">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              {cleanAnalyticName}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-mono font-medium">{ln.quantity}</td>
+                          <td className="p-3 text-right font-mono text-slate-700">₹{ln.unitPrice.toLocaleString('en-IN')}</td>
+                          <td className="p-3 text-right font-mono font-bold text-navy-950">
+                            ₹{lineSubtotal.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

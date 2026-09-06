@@ -24529,9 +24529,11 @@ export const INITIAL_BUDGETS: BudgetHealthItem[] = [
 // FINANCE: ANALYTIC ACCOUNTS (PS Page 4)
 // ==========================================
 export const INITIAL_ANALYTIC_ACCOUNTS: AnalyticAccountItem[] = [
-  { id: 'ana-0', name: 'Furniture Procurement', type: 'EXPENSES', description: 'Raw timber, teak logs and veneers' },
+  { id: 'ana-rev-1', name: 'Commercial Furniture Sales (Income)', type: 'INCOME', description: 'Institutional and commercial project contracts' },
+  { id: 'ana-rev-2', name: 'Retail & Showroom Distribution (Income)', type: 'INCOME', description: 'Walk-in showroom and retail store sales' },
+  { id: 'ana-4', name: 'Custom Design Studio (Income)', type: 'INCOME', description: 'Architectural custom consulting' },
+  { id: 'ana-0', name: 'Furniture Procurement (Expenses)', type: 'EXPENSES', description: 'Raw timber, teak logs and veneers' },
   { id: 'ana-1', name: 'Wood Procurement (Expenses)', type: 'EXPENSES', description: 'Raw timber, teak logs and veneers' },
   { id: 'ana-2', name: 'Operations & Utilities (Expenses)', type: 'EXPENSES', description: 'Workshop power, tooling and machinery' },
   { id: 'ana-3', name: 'Showroom Marketing (Expenses)', type: 'EXPENSES', description: 'Catalogues, expo stalls, and digital ads' },
-  { id: 'ana-4', name: 'Custom Design Studio (Income)', type: 'INCOME', description: 'Architectural custom consulting' },
 ];

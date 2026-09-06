@@ -32,6 +32,11 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
   const [saleQty, setSaleQty] = useState(1);
   const [salePrice, setSalePrice] = useState(products[0]?.salesPrice || 4500);
 
+  // Custom sale states
+  const [customSaleCustomerName, setCustomSaleCustomerName] = useState('');
+  const [customSaleCustomerCity, setCustomSaleCustomerCity] = useState('');
+  const [customSaleProductName, setCustomSaleProductName] = useState('');
+
   // Purchase Order
   const [purchVendor, setPurchVendor] = useState(
     contacts.find((c) => c.type === 'VENDOR' || c.type === 'BOTH')?.id || ''
@@ -39,6 +44,11 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
   const [purchProduct, setPurchProduct] = useState(products[0]?.id || '');
   const [purchQty, setPurchQty] = useState(1);
   const [purchPrice, setPurchPrice] = useState(products[0]?.purchasePrice || 2800);
+
+  // Custom purchase states
+  const [customPurchVendorName, setCustomPurchVendorName] = useState('');
+  const [customPurchVendorCity, setCustomPurchVendorCity] = useState('');
+  const [customPurchProductName, setCustomPurchProductName] = useState('');
 
   // Invoice
   const [invCustomer, setInvCustomer] = useState(
@@ -70,8 +80,38 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
 
   const handleSaleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const selProd = products.find((p) => p.id === saleProduct) || products[0];
-    const selContact = contacts.find((c) => c.id === saleCustomer) || contacts[0];
+
+    let selContact = contacts.find((c) => c.id === saleCustomer);
+    if (saleCustomer === '__OTHER__') {
+      if (!customSaleCustomerName.trim()) return;
+      selContact = addContact({
+        name: customSaleCustomerName.trim(),
+        type: 'CUSTOMER',
+        email: `${customSaleCustomerName.trim().toLowerCase().replace(/\s+/g, '')}@client.com`,
+        mobile: '+91 98765 43210',
+        city: customSaleCustomerCity.trim() || 'Coimbatore',
+        state: 'Tamil Nadu',
+        pincode: '641001',
+      });
+    } else if (!selContact) {
+      selContact = contacts[0];
+    }
+
+    let selProd = products.find((p) => p.id === saleProduct);
+    if (saleProduct === '__OTHER__') {
+      if (!customSaleProductName.trim()) return;
+      selProd = addProduct({
+        name: customSaleProductName.trim(),
+        salesPrice: salePrice,
+        purchasePrice: Math.round(salePrice * 0.65),
+        category: 'Custom Orders',
+        type: 'GOODS',
+        stock: 25,
+      });
+    } else if (!selProd) {
+      selProd = products[0];
+    }
+
     const subtotal = saleQty * salePrice;
     const taxTotal = Math.round(subtotal * 0.18);
     const grandTotal = subtotal + taxTotal;
@@ -92,7 +132,10 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
           taxRate: 18,
           subtotal,
           taxAmount: taxTotal,
-          total: grandTotal,
+          total: subtotal,
+          analyticAccountId: 'ana-rev-1',
+          analyticAccountName: 'Commercial Furniture Sales (Income)',
+          chartOfAccount: 'Sales Account (Revenue)',
         },
       ],
       subtotal,
@@ -111,8 +154,38 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
 
   const handlePurchaseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const selProd = products.find((p) => p.id === purchProduct) || products[0];
-    const selVendor = contacts.find((c) => c.id === purchVendor) || contacts[0];
+
+    let selVendor = contacts.find((c) => c.id === purchVendor);
+    if (purchVendor === '__OTHER__') {
+      if (!customPurchVendorName.trim()) return;
+      selVendor = addContact({
+        name: customPurchVendorName.trim(),
+        type: 'VENDOR',
+        email: `${customPurchVendorName.trim().toLowerCase().replace(/\s+/g, '')}@supplier.com`,
+        mobile: '+91 98765 12345',
+        city: customPurchVendorCity.trim() || 'Chennai',
+        state: 'Tamil Nadu',
+        pincode: '600001',
+      });
+    } else if (!selVendor) {
+      selVendor = contacts[0];
+    }
+
+    let selProd = products.find((p) => p.id === purchProduct);
+    if (purchProduct === '__OTHER__') {
+      if (!customPurchProductName.trim()) return;
+      selProd = addProduct({
+        name: customPurchProductName.trim(),
+        salesPrice: Math.round(purchPrice * 1.5),
+        purchasePrice: purchPrice,
+        category: 'Raw Materials',
+        type: 'GOODS',
+        stock: 50,
+      });
+    } else if (!selProd) {
+      selProd = products[0];
+    }
+
     const subtotal = purchQty * purchPrice;
     const taxTotal = Math.round(subtotal * 0.18);
     const grandTotal = subtotal + taxTotal;
@@ -133,7 +206,10 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
           taxRate: 18,
           subtotal,
           taxAmount: taxTotal,
-          total: grandTotal,
+          total: subtotal,
+          analyticAccountId: 'ana-0',
+          analyticAccountName: 'Furniture Procurement (Expenses)',
+          chartOfAccount: 'Purchase Expense A/c',
         },
       ],
       subtotal,
@@ -335,6 +411,7 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
                       onChange={(e) => setSaleCustomer(e.target.value)}
                       className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-navy-900 focus:outline-none focus:border-brand-500 cursor-pointer"
                     >
+                      <option value="__OTHER__">➕ Other (Enter New Customer Details...)</option>
                       {contacts
                         .filter((c) => c.type === 'CUSTOMER' || c.type === 'BOTH')
                         .map((c) => (
@@ -343,6 +420,31 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
                           </option>
                         ))}
                     </select>
+                    {saleCustomer === '__OTHER__' && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                        <div className="col-span-2">
+                          <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Customer Name *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Apex Corporation Pvt Ltd"
+                            value={customSaleCustomerName}
+                            onChange={(e) => setCustomSaleCustomerName(e.target.value)}
+                            className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">City</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Coimbatore"
+                            value={customSaleCustomerCity}
+                            onChange={(e) => setCustomSaleCustomerCity(e.target.value)}
+                            className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -352,17 +454,32 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
                         value={saleProduct}
                         onChange={(e) => {
                           setSaleProduct(e.target.value);
-                          const p = products.find((pr) => pr.id === e.target.value);
-                          if (p) setSalePrice(p.salesPrice);
+                          if (e.target.value !== '__OTHER__') {
+                            const p = products.find((pr) => pr.id === e.target.value);
+                            if (p) setSalePrice(p.salesPrice);
+                          }
                         }}
                         className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-navy-900 focus:outline-none focus:border-brand-500 cursor-pointer"
                       >
+                        <option value="__OTHER__">➕ Other (Custom Item...)</option>
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
                           </option>
                         ))}
                       </select>
+                      {saleProduct === '__OTHER__' && (
+                        <div className="mt-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Custom Product Name"
+                            value={customSaleProductName}
+                            onChange={(e) => setCustomSaleProductName(e.target.value)}
+                            className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -418,6 +535,7 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
                       onChange={(e) => setPurchVendor(e.target.value)}
                       className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-navy-900 focus:outline-none focus:border-brand-500 cursor-pointer"
                     >
+                      <option value="__OTHER__">➕ Other (Enter New Vendor Details...)</option>
                       {contacts
                         .filter((c) => c.type === 'VENDOR' || c.type === 'BOTH')
                         .map((c) => (
@@ -426,6 +544,31 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
                           </option>
                         ))}
                     </select>
+                    {purchVendor === '__OTHER__' && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 p-2.5 rounded-md bg-brand-50/60 border border-brand-200">
+                        <div className="col-span-2">
+                          <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">Supplier Name *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Apex Wood & Timbers Ltd"
+                            value={customPurchVendorName}
+                            onChange={(e) => setCustomPurchVendorName(e.target.value)}
+                            className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-brand-900 mb-0.5">City</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Chennai"
+                            value={customPurchVendorCity}
+                            onChange={(e) => setCustomPurchVendorCity(e.target.value)}
+                            className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -435,17 +578,32 @@ export const QuickActionModal: React.FC<QuickActionModalProps> = ({ actionId, on
                         value={purchProduct}
                         onChange={(e) => {
                           setPurchProduct(e.target.value);
-                          const p = products.find((pr) => pr.id === e.target.value);
-                          if (p) setPurchPrice(p.purchasePrice);
+                          if (e.target.value !== '__OTHER__') {
+                            const p = products.find((pr) => pr.id === e.target.value);
+                            if (p) setPurchPrice(p.purchasePrice);
+                          }
                         }}
                         className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-navy-900 focus:outline-none focus:border-brand-500 cursor-pointer"
                       >
+                        <option value="__OTHER__">➕ Other (Custom Supply Item...)</option>
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
                           </option>
                         ))}
                       </select>
+                      {purchProduct === '__OTHER__' && (
+                        <div className="mt-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Custom Material Name"
+                            value={customPurchProductName}
+                            onChange={(e) => setCustomPurchProductName(e.target.value)}
+                            className="w-full rounded border border-brand-300 bg-white px-2 py-1 text-xs text-navy-900 focus:outline-none"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div>

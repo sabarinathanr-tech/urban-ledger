@@ -12,6 +12,16 @@ export class AccountingController {
     }
   }
 
+  public async updateAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const updated = await accountingService.updateAccount(id, req.body);
+      sendSuccess(res, 'Account updated successfully', updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   public async getJournals(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const journals = await accountingService.getJournals();

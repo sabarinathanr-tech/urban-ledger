@@ -16,6 +16,7 @@ import {
   Trash2,
   AlertTriangle,
   Info,
+  Pencil,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ export function AccountingPage() {
     journalEntries,
     contacts,
     addAccount,
+    updateAccount,
     addJournal,
     createManualJournalEntry,
     postJournalEntry,
@@ -77,6 +79,14 @@ export function AccountingPage() {
   const [newAccountCode, setNewAccountCode] = useState('');
   const [newAccountType, setNewAccountType] = useState<AccountItem['type']>('ASSET');
   const [newAccountBalance, setNewAccountBalance] = useState<number | string>('');
+
+  // Edit Account state
+  const [isEditAccountModalOpen, setIsEditAccountModalOpen] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState('');
+  const [editAccountName, setEditAccountName] = useState('');
+  const [editAccountCode, setEditAccountCode] = useState('');
+  const [editAccountType, setEditAccountType] = useState<AccountItem['type']>('ASSET');
+  const [editAccountBalance, setEditAccountBalance] = useState<number | string>('');
 
   const [isNewJournalModalOpen, setIsNewJournalModalOpen] = useState(false);
   const [newJournalName, setNewJournalName] = useState('');
@@ -290,6 +300,31 @@ export function AccountingPage() {
     setNewAccountBalance('');
     setCoaViewMode('list');
     setIsNewAccountModalOpen(false);
+  };
+
+  const handleStartEditAccount = (acc: AccountItem) => {
+    setEditingAccountId(acc.id);
+    setEditAccountName(acc.name);
+    setEditAccountCode(acc.code);
+    setEditAccountType(acc.type);
+    setEditAccountBalance(acc.balance);
+    setIsEditAccountModalOpen(true);
+  };
+
+  const handleSaveEditedAccount = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingAccountId || !editAccountName.trim()) return;
+
+    updateAccount(editingAccountId, {
+      name: editAccountName.trim(),
+      code: editAccountCode.trim() || undefined,
+      type: editAccountType,
+      balance: parseFloat(String(editAccountBalance)) || 0,
+    });
+
+    setAlertMessage(`Account "${editAccountName}" updated successfully.`);
+    setTimeout(() => setAlertMessage(null), 4000);
+    setIsEditAccountModalOpen(false);
   };
 
   const handleSaveJournal = (e?: React.FormEvent) => {
@@ -691,6 +726,19 @@ export function AccountingPage() {
               </div>
             </div>
 
+            {/* Explanatory Accounting Classification Guidance */}
+            <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3.5 text-xs text-navy-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+              <div>
+                <span className="font-bold text-brand-900 block">📖 Chart of Accounts Hierarchy & Financial Statements:</span>
+                <p className="text-slate-600 text-[11px] mt-0.5 leading-relaxed">
+                  • <strong>Assets (Bank, Cash, Receivables, Stock, Property):</strong> Economic resources owned by the firm.<br />
+                  • <strong>Equity & Capital:</strong> Owner capital contributions & retained earnings balancing the double-entry ledger.<br />
+                  • <strong>Liabilities:</strong> Commercial debts owed to suppliers (Creditors) & GST tax authorities.<br />
+                  • Click <strong>"Edit"</strong> on any row below to update an account's name, code, type, or balance.
+                </p>
+              </div>
+            </div>
+
             {/* Table matching diagram */}
             <div className="rounded-lg border border-surface-border bg-white shadow-sm overflow-hidden">
               <Table>
@@ -726,17 +774,29 @@ export function AccountingPage() {
                         <Badge variant="success">ACTIVE</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedLedgerAccount(a.id);
-                            handleTabChange('LEDGER');
-                          }}
-                          className="h-7 text-[11px] px-2"
-                        >
-                          Ledger
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleStartEditAccount(a)}
+                            title="Edit account name, code, type, or balance"
+                            className="h-7 text-[11px] px-2 text-brand-700 hover:bg-brand-50 border-brand-200 cursor-pointer"
+                          >
+                            <Pencil size={11} className="mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedLedgerAccount(a.id);
+                              handleTabChange('LEDGER');
+                            }}
+                            className="h-7 text-[11px] px-2 text-slate-700 cursor-pointer"
+                          >
+                            Ledger
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -2017,6 +2077,113 @@ export function AccountingPage() {
                 Close
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* EDIT ACCOUNT MODAL                                           */}
+      {/* ============================================================ */}
+      {isEditAccountModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-navy-900">Edit Account</h3>
+                <p className="text-xs text-text-muted">Modify account name, code, type, or current balance</p>
+              </div>
+              <button
+                onClick={() => setIsEditAccountModalOpen(false)}
+                className="rounded p-1 text-text-muted hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedAccount} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">
+                  Account Name <span className="text-status-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editAccountName}
+                  onChange={(e) => setEditAccountName(e.target.value)}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Account Code</label>
+                  <input
+                    type="text"
+                    value={editAccountCode}
+                    onChange={(e) => setEditAccountCode(e.target.value)}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-navy-800 mb-1">Current Balance (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editAccountBalance}
+                    onChange={(e) => setEditAccountBalance(e.target.value)}
+                    className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs font-mono text-navy-900 focus:border-navy-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-navy-800 mb-1">
+                  Account Classification Type <span className="text-status-danger">*</span>
+                </label>
+                <select
+                  value={editAccountType}
+                  onChange={(e) => setEditAccountType(e.target.value as AccountItem['type'])}
+                  className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-xs text-navy-900 focus:border-navy-600 focus:outline-none cursor-pointer"
+                >
+                  <optgroup label="Balance Sheet: Assets">
+                    <option value="ASSET">Asset (Equipment, Building, Debtors, Inventory)</option>
+                    <option value="BANK">Bank (Current Account, Savings)</option>
+                    <option value="CASH">Cash (Petty Cash, Cash Register)</option>
+                  </optgroup>
+                  <optgroup label="Balance Sheet: Equity & Liabilities">
+                    <option value="CAPITAL">Capital / Owner Equity</option>
+                    <option value="EQUITY">Equity (Retained Reserves)</option>
+                    <option value="LIABILITY">Liability (Creditors, GST, Loans)</option>
+                  </optgroup>
+                  <optgroup label="Profit & Loss: Income & Expenses">
+                    <option value="INCOME">Income / Revenue (Sales, Services)</option>
+                    <option value="EXPENSE">Expense (Purchases, Materials)</option>
+                    <option value="OTHER_EXPENSE">Other Expense (Operations, Utilities)</option>
+                  </optgroup>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed bg-slate-50 p-2 rounded border border-slate-200">
+                  Tip: Setting to <strong>Asset / Bank / Cash</strong> classifies this account under Assets. Setting to <strong>Capital / Equity / Liability</strong> classifies it under Equity & Liabilities on the Balance Sheet.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditAccountModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-brand-700 hover:bg-brand-800 active:bg-brand-850 text-white cursor-pointer font-semibold"
+                >
+                  Save Account Changes
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

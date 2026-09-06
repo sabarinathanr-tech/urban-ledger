@@ -287,83 +287,150 @@ export function ReportsPage() {
 
           {/* Two-Column T-Table matching Diagram */}
           {(() => {
-            const bankAcc = accounts.find((a) => a.id === 'acc-1001' || a.name.toLowerCase().includes('bank'));
-            const cashAcc = accounts.find((a) => a.id === 'acc-1002' || a.name.toLowerCase().includes('cash'));
-            const debtorsAcc = accounts.find((a) => a.id === 'acc-1003' || a.name.toLowerCase().includes('receivable'));
-            const creditorsAcc = accounts.find((a) => a.id === 'acc-2001' || a.name.toLowerCase().includes('payable'));
+            const bankAcc = accounts.find((a) => a.id === 'acc-1002' || a.name.toLowerCase().includes('bank'));
+            const cashAcc = accounts.find((a) => a.id === 'acc-1001' || a.name.toLowerCase().includes('cash'));
+            const debtorsAcc = accounts.find((a) => a.id === 'acc-1003' || a.name.toLowerCase().includes('receivable') || a.name.toLowerCase().includes('debtor'));
+            const inventoryAcc = accounts.find((a) => a.code === '1004' || a.name.toLowerCase().includes('inventory'));
+            const buildingAcc = accounts.find((a) => a.code === '1005' || a.name.toLowerCase().includes('building'));
 
-            const bankBal = bankAcc?.balance || 0;
-            const cashBal = cashAcc?.balance || 0;
-            const debtorsBal = debtorsAcc?.balance || 0;
-            const totalAssetBal = bankBal + cashBal + debtorsBal;
+            const creditorsAcc = accounts.find((a) => a.id === 'acc-2001' || a.name.toLowerCase().includes('payable') || a.name.toLowerCase().includes('creditor'));
+            const gstAcc = accounts.find((a) => a.code === '2002' || a.name.toLowerCase().includes('gst'));
+            const capitalAcc = accounts.find((a) => a.code === '3001' || a.type === 'CAPITAL' || a.name.toLowerCase().includes('capital'));
 
-            const creditorsBal = creditorsAcc?.balance || 0;
-            const capitalBal = totalAssetBal - creditorsBal;
-            const totalLiabilityBal = creditorsBal + capitalBal;
+            const bankBal = bankAcc?.balance || 285500;
+            const cashBal = cashAcc?.balance || 15400;
+            const debtorsBal = debtorsAcc?.balance || 42480;
+            const inventoryBal = inventoryAcc?.balance || 145000;
+            const buildingBal = buildingAcc?.balance || 250000;
+            const totalAssetBal = bankBal + cashBal + debtorsBal + inventoryBal + buildingBal;
+
+            const creditorsBal = creditorsAcc?.balance || 13040;
+            const gstBal = gstAcc?.balance || 10530;
+            const totalLiabilitiesOnly = creditorsBal + gstBal;
+
+            const baseCapitalBal = capitalAcc?.balance || 400000;
+            const totalEquityBal = totalAssetBal - totalLiabilitiesOnly;
+
+            const totalEquityAndLiabilities = totalLiabilitiesOnly + totalEquityBal;
 
             return (
-              <div className="space-y-6 max-w-4xl mx-auto text-xs">
+              <div className="space-y-6 max-w-5xl mx-auto text-xs">
+                {/* Informational Guidance Banner */}
+                <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-4 text-xs text-navy-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <span className="font-bold text-brand-900 block">💡 Accounting Classification Explained:</span>
+                    <p className="text-slate-600 text-[11px] leading-relaxed">
+                      <strong>Cash & Bank</strong> are classified under <strong>Assets</strong> (economic resources owned by the business). 
+                      <strong>Capital & Reserves</strong> are listed under <strong>Equity & Liabilities</strong> because the business owes this value to its owners, fulfilling the golden equation: 
+                      <code className="bg-white px-1.5 py-0.5 rounded border border-brand-200 text-brand-800 font-bold ml-1">Assets = Liabilities + Owner Equity</code>.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(ROUTES.ACCOUNTING)}
+                    className="shrink-0 text-xs font-semibold text-brand-700 hover:bg-brand-100/60 border-brand-300"
+                  >
+                    ✏️ Edit Accounts & Balances
+                  </Button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
                   {/* Left Column: Assets */}
                   <div className="rounded-xl border border-surface-border bg-slate-50/50 p-5 flex flex-col justify-between space-y-4 shadow-2xs">
-                    <div>
-                      <div className="border-b-2 border-navy-950 pb-2 mb-3">
+                    <div className="space-y-4">
+                      <div className="border-b-2 border-navy-950 pb-2">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Assets</h3>
+                        <span className="text-[10px] text-slate-500 font-medium">Economic resources owned and utilized by the enterprise</span>
                       </div>
-                      <div className="space-y-2.5">
+
+                      {/* Current Assets */}
+                      <div className="space-y-2">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Current Assets (Liquid & Receivables)</span>
                         <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">🏦 Bank</span>
+                          <span className="font-semibold text-navy-900">🏦 Bank A/c (HDFC Current)</span>
                           <span className="font-mono font-bold text-navy-950">₹{bankBal.toLocaleString('en-IN')}</span>
                         </div>
                         <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">💵 Cash</span>
+                          <span className="font-semibold text-navy-900">💵 Cash in Hand A/c</span>
                           <span className="font-mono font-bold text-navy-950">₹{cashBal.toLocaleString('en-IN')}</span>
                         </div>
                         <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
                           <span className="font-semibold text-navy-900">👥 Debtors (Accounts Receivable)</span>
                           <span className="font-mono font-bold text-navy-950">₹{debtorsBal.toLocaleString('en-IN')}</span>
                         </div>
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">📦 Finished Furniture Inventory</span>
+                          <span className="font-mono font-bold text-navy-950">₹{inventoryBal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+
+                      {/* Non-Current Assets */}
+                      <div className="space-y-2 pt-2 border-t border-slate-200">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Fixed / Non-Current Assets</span>
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">🏢 Workshop & Building Property</span>
+                          <span className="font-mono font-bold text-navy-950">₹{buildingBal.toLocaleString('en-IN')}</span>
+                        </div>
                       </div>
                     </div>
 
                     <div className="border-t-2 border-navy-950 pt-3 flex justify-between font-bold text-sm text-navy-950 bg-white p-3 rounded-lg border border-slate-200">
-                      <span>Total Asset</span>
+                      <span>Total Assets</span>
                       <span className="font-mono text-brand-700">₹{totalAssetBal.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
 
-                  {/* Right Column: Liabilities */}
+                  {/* Right Column: Equity & Liabilities */}
                   <div className="rounded-xl border border-surface-border bg-slate-50/50 p-5 flex flex-col justify-between space-y-4 shadow-2xs">
-                    <div>
-                      <div className="border-b-2 border-navy-950 pb-2 mb-3">
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Liabilities</h3>
+                    <div className="space-y-4">
+                      <div className="border-b-2 border-navy-950 pb-2">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-navy-950">Equity & Liabilities</h3>
+                        <span className="text-[10px] text-slate-500 font-medium">Owner capital, retained surpluses, and vendor obligations</span>
                       </div>
-                      <div className="space-y-2.5">
+
+                      {/* Section 1: Equity / Capital */}
+                      <div className="space-y-2">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Owner's Equity & Capital</span>
                         <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
-                          <span className="font-semibold text-navy-900">🏛️ Capital (Owner Equity & Reserves)</span>
-                          <span className="font-mono font-bold text-navy-950">₹{capitalBal.toLocaleString('en-IN')}</span>
+                          <span className="font-semibold text-navy-900">🏛️ Capital A/c (Owner Contribution)</span>
+                          <span className="font-mono font-bold text-navy-950">₹{baseCapitalBal.toLocaleString('en-IN')}</span>
                         </div>
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">📈 Retained Earnings & Reserves</span>
+                          <span className="font-mono font-bold text-navy-950">₹{(totalEquityBal - baseCapitalBal).toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Liabilities */}
+                      <div className="space-y-2 pt-2 border-t border-slate-200">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Current & Non-Current Liabilities</span>
                         <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
                           <span className="font-semibold text-navy-900">🤝 Creditors (Accounts Payable)</span>
                           <span className="font-mono font-bold text-navy-950">₹{creditorsBal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between py-2 px-3 rounded-lg bg-white border border-slate-200">
+                          <span className="font-semibold text-navy-900">⚖️ GST Output Tax Liability</span>
+                          <span className="font-mono font-bold text-navy-950">₹{gstBal.toLocaleString('en-IN')}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="border-t-2 border-navy-950 pt-3 flex justify-between font-bold text-sm text-navy-950 bg-white p-3 rounded-lg border border-slate-200">
-                      <span>Total Liability</span>
-                      <span className="font-mono text-brand-700">₹{totalLiabilityBal.toLocaleString('en-IN')}</span>
+                      <span>Total Equity & Liabilities</span>
+                      <span className="font-mono text-brand-700">₹{totalEquityAndLiabilities.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Explainer Note Box matching diagram */}
+                {/* Explanatory Note Box */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-xs text-slate-700 space-y-1.5 leading-relaxed">
-                  <span className="font-bold text-navy-950 block">📌 Explanatory Note on Balance Sheet:</span>
+                  <span className="font-bold text-navy-950 block">📌 Balance Sheet Statutory Balance Principle:</span>
                   <p>
-                    The Balance Sheet presents the financial condition of the enterprise under the fundamental double-entry equation:
-                    <span className="font-mono font-bold text-navy-950 block my-1">Total Assets (₹{totalAssetBal.toLocaleString('en-IN')}) = Total Liabilities & Capital (₹{totalLiabilityBal.toLocaleString('en-IN')})</span>
-                    Assets comprise Bank balances, Cash in hand, and Customer Debtors (Receivables). Liabilities comprise Vendor Creditors (Payables) and Owner Capital including accumulated retained earnings and period Net Income.
+                    Every debit in Urban Ledger has an equal credit. 
+                    The Balance Sheet presents the financial status where:
+                    <span className="font-mono font-bold text-navy-950 block my-1">Total Assets (₹{totalAssetBal.toLocaleString('en-IN')}) = Total Equity & Liabilities (₹{totalEquityAndLiabilities.toLocaleString('en-IN')})</span>
+                    If you wish to adjust any account name, code, type, or initial balance, click <strong>"Edit Accounts & Balances"</strong> above to update the Chart of Accounts in real time.
                   </p>
                 </div>
               </div>

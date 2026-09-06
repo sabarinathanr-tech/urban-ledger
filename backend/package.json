@@ -12,7 +12,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
-    "prisma:seed:bulk": "tsx prisma/seed-bulk.ts"
+    "prisma:seed:bulk": "tsx prisma/seed-bulk.ts",
+    "db:push": "prisma db push",
+    "db:cloud:setup": "prisma db push && tsx prisma/seed.ts && tsx prisma/seed-bulk.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

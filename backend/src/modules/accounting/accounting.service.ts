@@ -282,6 +282,61 @@ export class AccountingService {
     return Array.from(memoryAccounts.values()).sort((a, b) => a.code.localeCompare(b.code));
   }
 
+  public async updateAccount(id: string, updates: Partial<AccountRecord>): Promise<AccountRecord> {
+    if (isDatabaseAvailable()) {
+      try {
+        const existing = await prisma.account.findUnique({ where: { id } });
+        if (existing) {
+          const updated = await prisma.account.update({
+            where: { id },
+            data: {
+              ...(updates.name ? { name: updates.name } : {}),
+              ...(updates.code ? { code: updates.code } : {}),
+              ...(updates.type ? { type: updates.type as any } : {}),
+            },
+          });
+          return {
+            id: updated.id,
+            name: updated.name,
+            code: updated.code,
+            type: updated.type as any,
+            isActive: updated.isActive,
+            debitBalance: 0,
+            creditBalance: 0,
+            balance: updates.balance !== undefined ? Number(updates.balance) : 0,
+          };
+        }
+      } catch (err) {
+        logger.warn('Failed to update account in Prisma, updating memory', err);
+      }
+    }
+
+    let acc = memoryAccounts.get(id);
+    if (!acc) {
+      acc = Array.from(memoryAccounts.values()).find((a) => a.code === id || a.id === id);
+    }
+    if (acc) {
+      if (updates.name) acc.name = updates.name;
+      if (updates.code) acc.code = updates.code;
+      if (updates.type) acc.type = updates.type as any;
+      if (updates.balance !== undefined) acc.balance = Number(updates.balance);
+      return acc;
+    }
+
+    const newAcc: AccountRecord = {
+      id,
+      name: updates.name || 'Custom Account',
+      code: updates.code || '1999',
+      type: (updates.type as any) || 'ASSET',
+      isActive: true,
+      debitBalance: 0,
+      creditBalance: 0,
+      balance: Number(updates.balance || 0),
+    };
+    memoryAccounts.set(id, newAcc);
+    return newAcc;
+  }
+
   public async getJournals(): Promise<JournalRecord[]> {
     if (isDatabaseAvailable()) {
       try {

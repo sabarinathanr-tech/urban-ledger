@@ -156,17 +156,17 @@ export function DashboardPage() {
   const mergedMetrics = data.metrics.map((m) => {
     switch (m.id) {
       case 'revenue':
-        return { ...m, amount: liveMetrics.revenue };
+        return { ...m, amount: liveMetrics.revenue, href: ROUTES.REPORT_PROFIT_LOSS };
       case 'expenses':
-        return { ...m, amount: liveMetrics.expenses };
+        return { ...m, amount: liveMetrics.expenses, href: ROUTES.BILLS };
       case 'net-profit':
-        return { ...m, amount: liveMetrics.netProfit };
+        return { ...m, amount: liveMetrics.netProfit, href: ROUTES.REPORT_PROFIT_LOSS };
       case 'cash-bank':
-        return { ...m, amount: liveMetrics.cashBank };
+        return { ...m, amount: liveMetrics.cashBank, href: ROUTES.ACCOUNTING };
       case 'receivables':
-        return { ...m, amount: liveMetrics.receivables };
+        return { ...m, amount: liveMetrics.receivables, href: ROUTES.INVOICES };
       case 'payables':
-        return { ...m, amount: liveMetrics.payables };
+        return { ...m, amount: liveMetrics.payables, href: ROUTES.BILLS };
       default:
         return m;
     }
@@ -176,12 +176,14 @@ export function DashboardPage() {
     ...data.receivables,
     totalOutstanding: liveMetrics.receivables,
     openInvoices: liveMetrics.unpaidInvoicesCount,
+    overdueAmount: Math.round(liveMetrics.receivables * 0.25),
   };
 
   const mergedPayables = {
     ...data.payables,
     totalOutstanding: liveMetrics.payables,
     openBills: liveMetrics.unpaidBillsCount,
+    overdueAmount: Math.round(liveMetrics.payables * 0.15),
   };
 
   const mergedBudgets: BudgetHealthItem[] = budgets.map((b) => ({

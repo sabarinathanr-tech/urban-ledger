@@ -121,6 +121,7 @@ export function BudgetsPage() {
       amountToAchieve: 190000,
     },
   ]);
+  const [customBudgetAnalyticName, setCustomBudgetAnalyticName] = useState('');
 
   // Active budget in Form View with guaranteed non-null fallback
   const currentBudget = useMemo(() => {
@@ -930,22 +931,15 @@ export function BudgetsPage() {
                     </Button>
                   </div>
 
-                  {/* Right: Interactive Stage Pipeline Widget (Draft -> Confirm -> Revised -> Canceled) */}
+                  {/* Right: Stage Pipeline Status Indicator (Draft -> Confirm -> Revised -> Canceled) */}
                   <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-semibold shrink-0">
                     {STAGES.map((s, idx) => {
                       const isActive = (currentBudget?.stage || 'DRAFT') === s.key;
                       return (
                         <div key={s.key} className="flex items-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (s.key === 'DRAFT') handleResetToDraft();
-                              else if (s.key === 'CONFIRM') handleConfirmBudget();
-                              else if (s.key === 'REVISED') handleReviseBudget();
-                              else if (s.key === 'CANCELED') handleCancelBudget();
-                            }}
-                            title={`Switch stage to ${s.label}`}
-                            className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                          <span
+                            title={`Current Stage: ${s.label}`}
+                            className={`px-2.5 py-1 rounded text-xs transition-colors select-none ${
                               isActive
                                 ? s.key === 'CONFIRM'
                                   ? 'bg-emerald-600 text-white font-bold shadow-xs'
@@ -954,11 +948,11 @@ export function BudgetsPage() {
                                   : s.key === 'CANCELED'
                                   ? 'bg-rose-600 text-white font-bold shadow-xs'
                                   : 'bg-slate-700 text-white font-bold shadow-xs'
-                                : 'text-text-muted hover:text-navy-900 hover:bg-slate-200/60'
+                                : 'text-slate-400 font-medium'
                             }`}
                           >
                             {s.label}
-                          </button>
+                          </span>
                           {idx < STAGES.length - 1 && (
                             <span className="mx-1 text-slate-300 select-none text-[11px]">&rarr;</span>
                           )}
@@ -1042,20 +1036,56 @@ export function BudgetsPage() {
                         <select
                           value={formLines[0]?.analyticAccountId || 'ana-0'}
                           onChange={(e) => {
-                            const selectedAcc = analyticAccounts.find((a) => a.id === e.target.value);
-                            if (selectedAcc) {
-                              handleLineChange(0, 'analyticAccountId', selectedAcc.id);
-                              handleSaveBudgetForm();
+                            if (e.target.value === '__OTHER__') {
+                              handleLineChange(0, 'analyticAccountId', '__OTHER__');
+                            } else {
+                              const selectedAcc = analyticAccounts.find((a) => a.id === e.target.value);
+                              if (selectedAcc) {
+                                handleLineChange(0, 'analyticAccountId', selectedAcc.id);
+                                handleLineChange(0, 'analyticAccountName', selectedAcc.name);
+                                handleSaveBudgetForm();
+                              }
                             }
                           }}
                           className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-navy-900 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 shadow-2xs cursor-pointer"
                         >
+                          <option value="__OTHER__">➕ Other (Create New Analytic Account...)</option>
                           {analyticAccounts.map((acc) => (
                             <option key={acc.id} value={acc.id}>
                               {acc.name} ({acc.type === 'INCOME' ? 'Income' : 'Expense'})
                             </option>
                           ))}
                         </select>
+                        {formLines[0]?.analyticAccountId === '__OTHER__' && (
+                          <div className="mt-2 flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="New Analytic Account Name..."
+                              value={customBudgetAnalyticName}
+                              onChange={(e) => setCustomBudgetAnalyticName(e.target.value)}
+                              className="flex-1 rounded border border-brand-300 bg-white px-2 py-1.5 text-xs text-navy-900 focus:outline-none"
+                            />
+                            <Button
+                              size="sm"
+                              type="button"
+                              onClick={() => {
+                                if (!customBudgetAnalyticName.trim()) return;
+                                const created = addAnalyticAccount({
+                                  name: customBudgetAnalyticName.trim(),
+                                  type: 'EXPENSES',
+                                  description: 'Custom analytic account created from budget',
+                                });
+                                handleLineChange(0, 'analyticAccountId', created.id);
+                                handleLineChange(0, 'analyticAccountName', created.name);
+                                setCustomBudgetAnalyticName('');
+                                handleSaveBudgetForm();
+                              }}
+                              className="bg-brand-700 hover:bg-brand-800 text-white text-xs px-3 cursor-pointer"
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Revision indicator row */}
@@ -1225,20 +1255,26 @@ export function BudgetsPage() {
                                   </span>
                                 </TableCell>
 
-                                {/* Committed Amount Input (Clean pristine white background with crisp dark text) */}
+                                {/* Committed Amount Input with helper preview */}
                                 <TableCell className="text-right">
-                                  <div className="relative flex items-center justify-end">
-                                    <span className="text-slate-500 mr-1 text-xs font-semibold">₹</span>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={line.committedAmount}
-                                      onChange={(e) =>
-                                        handleLineChange(idx, 'committedAmount', Number(e.target.value))
-                                      }
-                                      onBlur={handleSaveBudgetForm}
-                                      className="w-32 text-right font-mono font-bold text-xs rounded-md border border-slate-300 bg-white text-navy-900 px-2.5 py-1.5 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 shadow-2xs"
-                                    />
+                                  <div className="flex flex-col items-end">
+                                    <div className="relative flex items-center justify-end">
+                                      <span className="text-slate-500 mr-1 text-xs font-semibold">₹</span>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        value={line.committedAmount}
+                                        onChange={(e) =>
+                                          handleLineChange(idx, 'committedAmount', Number(e.target.value))
+                                        }
+                                        onBlur={handleSaveBudgetForm}
+                                        placeholder="e.g. 50000"
+                                        className="w-32 text-right font-mono font-bold text-xs rounded-md border border-slate-300 bg-white text-navy-900 px-2.5 py-1.5 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 shadow-2xs"
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                      Limit: ₹{Number(line.committedAmount || 0).toLocaleString('en-IN')}
+                                    </span>
                                   </div>
                                 </TableCell>
 
@@ -1304,20 +1340,27 @@ export function BudgetsPage() {
                             ))}
 
                             {/* Summary / Total Row */}
-                            <TableRow className="bg-slate-50 font-bold border-t-2 border-slate-200">
-                              <TableCell colSpan={2} className="text-xs text-navy-900 uppercase tracking-wide">
-                                Total Analytical Allocation
+                            <TableRow className="bg-slate-100/90 font-bold border-t-2 border-slate-300">
+                              <TableCell colSpan={2} className="text-xs text-navy-950 uppercase tracking-wide">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full bg-brand-600"></span>
+                                  <span>Total Budget Limit & Spend</span>
+                                </div>
                               </TableCell>
-                              <TableCell className="text-right font-mono font-bold text-xs text-navy-900 whitespace-nowrap">
+                              <TableCell className="text-right font-mono font-bold text-xs text-navy-950 whitespace-nowrap bg-slate-200/50">
+                                <div className="text-[10px] text-slate-500 uppercase font-sans font-semibold">Total Limit</div>
                                 ₹{totalCommitted.toLocaleString('en-IN')}
                               </TableCell>
                               <TableCell className="text-right font-mono font-bold text-xs text-brand-700 whitespace-nowrap">
+                                <div className="text-[10px] text-slate-500 uppercase font-sans font-semibold">Total Spend</div>
                                 ₹{totalAchieved.toLocaleString('en-IN')}
                               </TableCell>
                               <TableCell className="text-right font-mono font-bold text-xs text-navy-900 whitespace-nowrap">
+                                <div className="text-[10px] text-slate-500 uppercase font-sans font-semibold">Overall %</div>
                                 {formUtilization.toFixed(1)}%
                               </TableCell>
-                              <TableCell className="text-right font-mono font-bold text-xs text-emerald-700 whitespace-nowrap">
+                              <TableCell className="text-right font-mono font-bold text-xs text-emerald-700 whitespace-nowrap bg-emerald-50/50">
+                                <div className="text-[10px] text-slate-500 uppercase font-sans font-semibold">Remaining</div>
                                 ₹{Math.max(0, totalCommitted - totalAchieved).toLocaleString('en-IN')}
                               </TableCell>
                               <TableCell></TableCell>
